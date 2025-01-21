@@ -8,39 +8,60 @@ import { redirect } from "next/navigation";
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
   const password = formData.get("password")?.toString();
+  const username = formData.get("username")?.toString();
   const supabase = await createClient();
   const origin = (await headers()).get("origin");
 
-  if (!email || !password) {
+  if (!email || !password || !username) {
     return encodedRedirect(
       "error",
       "/sign-up",
-      "Email and password are required",
+      "Username, email and password are required",
     );
   }
 
-  const { error } = await supabase.auth.signUp({
+  const { data: { user }, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
     options: {
       emailRedirectTo: `${origin}/auth/callback`,
+      data: {
+        username: username,
+      }
     },
   });
 
-  if (error) {
+  if (signUpError) {
     console.error('Sign up error details:', {
-      code: error.code,
-      message: error.message,
-      details: error,
+      code: signUpError.code,
+      message: signUpError.message,
+      details: signUpError,
     });
-    return encodedRedirect("error", "/sign-up", error.message);
-  } else {
-    return encodedRedirect(
-      "success",
-      "/sign-up",
-      "Thanks for signing up! Please check your email for a verification link.",
-    );
+    return encodedRedirect("error", "/sign-up", signUpError.message);
   }
+
+  if (user) {
+    const { error: profileError } = await supabase
+      .from('users')
+      .insert([
+        {
+          id: user.id,
+          username: username,
+          email: email,
+        }
+      ]);
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError);
+      return encodedRedirect("error", "/sign-up", "Failed to create user profile");
+    }
+  }
+
+  return encodedRedirect(
+    "success",
+    "/sign-up",
+    "Thanks for signing up! Please check your email for a verification link.",
+  );
 };
 
 export const signInAction = async (formData: FormData) => {
