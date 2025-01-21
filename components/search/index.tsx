@@ -2,15 +2,25 @@
 
 import SearchTextarea from './textarea';
 import SearchActions from './actions';
+import Suggestions from './suggestions';
 
 export default function SearchInput() {
+  const suggestions = [
+    { icon: '💻', text: 'Code', action: 'code' },
+    { icon: '💡', text: 'Brainstorm', action: 'brainstorm' },
+    { icon: '📝', text: 'Summarize text', action: 'summarize' },
+    { icon: '✨', text: 'Surprise me', action: 'surprise' },
+    { icon: '📋', text: 'Make a plan', action: 'plan' },
+  ];
+
   return (
-    <div className="relative group">
-      <div className="absolute -inset-1 bg-gradient-to-r from-rose-400/20 via-fuchsia-500/20 to-indigo-500/20 rounded-2xl blur-xl opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200 animate-gradient"></div>
-      <div className="relative bg-white dark:bg-black rounded-xl shadow-2xl shadow-black/5 ring-1 ring-slate-700/5">
-        <SearchTextarea />
-        <SearchActions />
+    <div className="w-full max-w-2xl mx-auto space-y-6">
+      <div className="relative">
+        <div className="relative bg-[#F7F7F8] dark:bg-[#444654] rounded-xl">
+          <SearchTextarea />
+        </div>
       </div>
+      <Suggestions items={suggestions} />
     </div>
   );
 }

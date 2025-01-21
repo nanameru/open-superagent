@@ -1,34 +1,30 @@
 'use client';
 
-interface SuggestionItem {
-  emoji: string;
+interface Suggestion {
+  icon: string;
   text: string;
-  gradient: string;
+  action: string;
 }
 
 interface SuggestionsProps {
-  items: SuggestionItem[];
+  items: Suggestion[];
 }
 
 export default function Suggestions({ items }: SuggestionsProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div className="flex flex-wrap gap-2">
       {items.map((item, index) => (
         <button
           key={index}
-          className="group relative flex items-center gap-3 p-3.5 text-left transition-all duration-300"
+          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-[#444654] hover:bg-gray-50 dark:hover:bg-[#4F5361] rounded-lg border border-gray-200 dark:border-gray-600/50 transition-colors"
         >
-          <div className={`absolute inset-0 bg-gradient-to-r ${item.gradient} rounded-xl opacity-[0.08] group-hover:opacity-[0.12] transition-opacity`} />
-          <div className="relative flex items-center gap-3">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/95 shadow-sm shadow-black/5 ring-1 ring-black/5 transition-colors group-hover:bg-white">
-              {item.emoji}
-            </span>
-            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-              {item.text}
-            </span>
-          </div>
+          <span className="text-base">{item.icon}</span>
+          <span>{item.text}</span>
         </button>
       ))}
+      <button className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-[#444654] hover:bg-gray-50 dark:hover:bg-[#4F5361] rounded-lg border border-gray-200 dark:border-gray-600/50 transition-colors">
+        More
+      </button>
     </div>
   );
 }
