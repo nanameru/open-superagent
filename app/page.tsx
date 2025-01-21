@@ -8,10 +8,10 @@ import Suggestions from '@/components/search/suggestions'
 
 export default async function Home() {
   const suggestions = [
-    { emoji: '🧘', text: 'マインドフルネスの始め方', gradient: 'from-gray-900 via-gray-800 to-black' },
-    { emoji: '✈️', text: '2025年人気の旅行先', gradient: 'from-black via-gray-800 to-gray-700' },
-    { emoji: '🏖️', text: '日本のおすすめビーチスポット', gradient: 'from-gray-800 via-gray-700 to-gray-600' },
-    { emoji: '💡', text: 'プログラミング学習のコツ', gradient: 'from-gray-700 via-gray-800 to-black' }
+    { emoji: '🧘', text: 'マインドフルネスの始め方', gradient: 'from-purple-500 to-indigo-500' },
+    { emoji: '✈️', text: '2025年人気の旅行先', gradient: 'from-rose-400 to-orange-400' },
+    { emoji: '🏖️', text: '日本のおすすめビーチスポット', gradient: 'from-cyan-400 to-blue-500' },
+    { emoji: '💡', text: 'プログラミング学習のコツ', gradient: 'from-emerald-400 to-cyan-400' }
   ]
 
   return (
