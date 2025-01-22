@@ -3,15 +3,18 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { generateSubQueries } from '@/utils/deepseek';
+import { executeCozeQueries } from '@/utils/coze';
 import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
+import ProcessDetails from '@/components/search/process-details';
 
 export default function SearchNewPage() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState<string>('');
   const [subQueries, setSubQueries] = useState<Array<{ query: string }>>([]);
+  const [cozeResults, setCozeResults] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [status, setStatus] = useState<'understanding' | 'thinking' | 'generating' | 'completed'>('understanding');
+  const [status, setStatus] = useState<'understanding' | 'thinking' | 'processing' | 'generating' | 'completed'>('understanding');
   const [isProcessExpanded, setIsProcessExpanded] = useState(true);
 
   useEffect(() => {
@@ -28,6 +31,13 @@ export default function SearchNewPage() {
             .then((response) => {
               const formattedQueries = response.map(query => ({ query }));
               setSubQueries(formattedQueries);
+              setStatus('processing');
+              
+              // Execute Coze queries in parallel
+              return executeCozeQueries(formattedQueries.map(q => q.query));
+            })
+            .then((results) => {
+              setCozeResults(results);
               setStatus('generating');
               setTimeout(() => {
                 setStatus('completed');
@@ -54,6 +64,7 @@ export default function SearchNewPage() {
   const statusSteps = [
     { key: 'understanding', icon: '💭', label: '理解' },
     { key: 'thinking', icon: '💡', label: '分析' },
+    { key: 'processing', icon: '🔄', label: '処理中' },
     { key: 'generating', icon: '✍️', label: '生成' },
     { key: 'completed', icon: '✨', label: '完了' }
   ];

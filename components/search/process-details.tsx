@@ -2,14 +2,18 @@
 
 import { useEffect } from 'react';
 import SubQueries from './sub-queries';
+import PostList from './post-list';
+import ParsedPosts from './parsed-posts';
+import { FormattedResponse } from '@/utils/coze';
 
 interface ProcessDetailsProps {
   query: string;
-  status: 'understanding' | 'thinking' | 'generating' | 'completed';
+  status: 'understanding' | 'thinking' | 'processing' | 'generating' | 'completed';
   subQueries: string[];
   isLoading: boolean;
   isProcessExpanded: boolean;
   onToggleExpand: () => void;
+  cozeResults?: FormattedResponse[];
 }
 
 export default function ProcessDetails({ 
@@ -18,14 +22,31 @@ export default function ProcessDetails({
   subQueries, 
   isLoading,
   isProcessExpanded,
-  onToggleExpand 
+  onToggleExpand,
+  cozeResults
 }: ProcessDetailsProps) {
   useEffect(() => {
     // 回答生成完了時にプロセス詳細を閉じる
     if (status === 'completed' && isProcessExpanded) {
       onToggleExpand();
     }
-  }, [status, onToggleExpand, isProcessExpanded]);
+    // Debug output with styling
+    if (status === 'processing') {
+      console.log(
+        '%c🤖 Coze APIを起動しました！検索を開始します... %c\n',
+        'background: #4CAF50; color: white; font-size: 14px; padding: 8px; border-radius: 4px; font-weight: bold;',
+        'font-size: 0'
+      );
+    }
+    if (cozeResults) {
+      console.log(
+        '%c📊 検索結果が届きました！ %c\n',
+        'background: #2196F3; color: white; font-size: 14px; padding: 8px; border-radius: 4px; font-weight: bold;',
+        'font-size: 0'
+      );
+      console.log('結果:', cozeResults);
+    }
+  }, [status, onToggleExpand, isProcessExpanded, cozeResults]);
 
   return (
     <div className="space-y-4">
@@ -76,9 +97,50 @@ export default function ProcessDetails({
             </div>
           )}
 
-          {/* Sub queries */}
-          {status !== 'understanding' && status !== 'thinking' && (
-            <SubQueries queries={subQueries.map(query => ({ query }))} isLoading={isLoading} />
+          {/* サブクエリ一覧 */}
+          {subQueries.length > 0 && (
+            <div className="mt-4">
+              <SubQueries queries={subQueries.map(query => ({ query }))} isLoading={isLoading} />
+            </div>
+          )}
+
+          {/* パース結果の表示 */}
+          {status === 'processing' && cozeResults && cozeResults.some(result => result.posts.length > 0) && (
+            <div className="mt-4">
+              <ParsedPosts results={cozeResults} />
+            </div>
+          )}
+
+          {/* 回答生成中の表示 */}
+          {status === 'generating' && (
+            <div className="mt-4 flex items-center gap-3">
+              <div className="relative w-6 h-6 flex items-center justify-center">
+                <div className="absolute inset-0 animate-ping rounded-full bg-blue-400 opacity-20"></div>
+                <span className="relative">✍️</span>
+              </div>
+              <div className="text-sm text-gray-600">
+                回答を生成しています...
+              </div>
+            </div>
+          )}
+
+          {/* 検索結果の詳細表示（折りたたみ可能） */}
+          {cozeResults && cozeResults.length > 0 && cozeResults.some(result => result.posts.length > 0) && (
+            <div className="mt-6">
+              <button
+                onClick={onToggleExpand}
+                className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+              >
+                <span>{isProcessExpanded ? '▼' : '▶'}</span>
+                <span>検索結果の詳細を{isProcessExpanded ? '閉じる' : '表示'}</span>
+              </button>
+              
+              {isProcessExpanded && (
+                <div className="mt-4">
+                  <PostList posts={cozeResults.flatMap(result => result.posts)} />
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
