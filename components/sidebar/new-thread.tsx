@@ -6,7 +6,7 @@ export default function NewThread() {
       <button className="w-full flex items-center justify-between px-5 py-3 text-sm glassmorphism rounded-xl hover-effect group">
         <div className="flex items-center space-x-3">
           <Plus className="w-4 h-4 text-gray-700 group-hover:text-black" />
-          <span className="font-medium">New Thread</span>
+          <span className="font-medium">新規スレッド</span>
         </div>
         <div className="flex items-center space-x-2 px-2 py-1 rounded-lg bg-black/5 group-hover:bg-black/10">
           <Command className="w-3.5 h-3.5 text-gray-500" />

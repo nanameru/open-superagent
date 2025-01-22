@@ -7,10 +7,10 @@ export default async function Home() {
         <div className="w-full max-w-2xl space-y-6 px-4">
           <div className="text-center space-y-2">
             <h1 className="text-4xl font-semibold text-gray-900 dark:text-white">
-              What can I help with?
+              何かお手伝いできることはありますか？
             </h1>
             <p className="text-base text-gray-600 dark:text-gray-300">
-              Your AI assistant for anything and everything
+              あらゆることに対応できるAIアシスタントです
             </p>
           </div>
           <SearchInput />

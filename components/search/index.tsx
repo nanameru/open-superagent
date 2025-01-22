@@ -1,26 +1,41 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import SearchTextarea from './textarea';
 import SearchActions from './actions';
 import Suggestions from './suggestions';
 
 export default function SearchInput() {
+  const [inputText, setInputText] = useState('');
+  const router = useRouter();
+
   const suggestions = [
-    { icon: '💻', text: 'Code', action: 'code' },
-    { icon: '💡', text: 'Brainstorm', action: 'brainstorm' },
-    { icon: '📝', text: 'Summarize text', action: 'summarize' },
-    { icon: '✨', text: 'Surprise me', action: 'surprise' },
-    { icon: '📋', text: 'Make a plan', action: 'plan' },
+    { icon: '🔥', text: 'AIの最新情報を教えて', action: 'latest' },
+    { icon: '⏰', text: '1日前のAI情報を教えて', action: 'yesterday' },
+    { icon: '📅', text: '10月中のAI情報を教えて', action: 'october' },
   ];
 
+  const handleSuggestionClick = (text: string) => {
+    setInputText(text);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputText.trim()) {
+      router.push(`/search/new?q=${encodeURIComponent(inputText.trim())}`);
+    }
+  };
+
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6">
+    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto space-y-6">
       <div className="relative">
         <div className="relative bg-[#F7F7F8] dark:bg-[#444654] rounded-xl">
-          <SearchTextarea />
+          <SearchTextarea value={inputText} onChange={setInputText} />
         </div>
       </div>
-      <Suggestions items={suggestions} />
-    </div>
+      <Suggestions items={suggestions} onSuggestionClick={handleSuggestionClick} />
+      <button type="submit" className="hidden">Submit</button>
+    </form>
   );
 }
