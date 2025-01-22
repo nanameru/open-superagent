@@ -4,32 +4,48 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { generateSubQueries } from '@/utils/deepseek';
 import SubQueries from '@/components/search/sub-queries';
+import GeneratedAnswer from '@/components/search/generated-answer';
 
 export default function SearchNewPage() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState<string>('');
   const [subQueries, setSubQueries] = useState<Array<{ query: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState<'understanding' | 'thinking' | 'generating' | 'completed'>('understanding');
 
   useEffect(() => {
     const searchQuery = searchParams.get('q');
     if (searchQuery) {
       setQuery(searchQuery);
       setIsLoading(true);
+      setStatus('understanding');
       
-      generateSubQueries(searchQuery)
-        .then((response) => {
-          // Transform string[] into Array<{ query: string }>
-          const formattedQueries = response.map(query => ({ query }));
-          setSubQueries(formattedQueries);
-        })
-        .catch((error) => {
-          console.error('Error generating sub-queries:', error);
-          setSubQueries([]);
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
+      // 1秒後に "thinking" 状態に移行
+      setTimeout(() => {
+        setStatus('thinking');
+        
+        // さらに1秒後にサブクエリの生成を開始
+        setTimeout(() => {
+          generateSubQueries(searchQuery)
+            .then((response) => {
+              const formattedQueries = response.map(query => ({ query }));
+              setSubQueries(formattedQueries);
+              setStatus('generating');
+              
+              // 1秒後に完了状態に移行
+              setTimeout(() => {
+                setStatus('completed');
+              }, 1000);
+            })
+            .catch((error) => {
+              console.error('Error generating sub-queries:', error);
+              setSubQueries([]);
+            })
+            .finally(() => {
+              setIsLoading(false);
+            });
+        }, 1000);
+      }, 1000);
     }
   }, [searchParams]);
 
@@ -77,7 +93,8 @@ export default function SearchNewPage() {
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-start gap-4 p-6 bg-black/[0.02] rounded-xl backdrop-blur-sm">
+            {/* ステータス1: 問題を理解する */}
+            <div className={`flex items-start gap-4 p-6 bg-black/[0.02] rounded-xl backdrop-blur-sm ${status !== 'understanding' && 'opacity-50'}`}>
               <span className="mt-1 text-xl">💭</span>
               <div>
                 <div className="font-semibold mb-2 text-gray-900">問題を理解する</div>
@@ -85,42 +102,30 @@ export default function SearchNewPage() {
               </div>
             </div>
 
-            <div className="flex items-start gap-4 p-6 bg-black/[0.02] rounded-xl backdrop-blur-sm">
+            {/* ステータス2: 質問を考えている */}
+            <div className={`flex items-start gap-4 p-6 bg-black/[0.02] rounded-xl backdrop-blur-sm ${status !== 'thinking' && 'opacity-50'}`}>
               <span className="mt-1 text-xl">💡</span>
               <div className="w-full">
                 <div className="font-semibold mb-2 text-gray-900">質問を考えています</div>
                 <div className="text-gray-600 mb-4">
                   {subQueries.length} 個のサブクエリに分解され、{subQueries.length} のソースが見つかり、3 言語
                 </div>
-                <div className="space-y-4">
-                  <div className="text-gray-900 font-medium">最新のAIに関するニュースや情報を検索する。</div>
-                  {isLoading ? (
-                    <div className="flex items-center justify-center py-6">
-                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-black/20 border-t-black"></div>
-                    </div>
-                  ) : (
-                    subQueries.length > 0 && (
-                      <SubQueries 
-                        queries={subQueries} 
-                        onSelect={(selectedQuery) => {
-                          const searchParams = new URLSearchParams(window.location.search);
-                          searchParams.set('q', selectedQuery);
-                          window.location.search = searchParams.toString();
-                        }}
-                      />
-                    )
-                  )}
+                <SubQueries queries={subQueries} isLoading={isLoading} />
+              </div>
+            </div>
+
+            {/* ステータス3: 回答生成 */}
+            <div className={`flex items-start gap-4 p-6 bg-black/[0.02] rounded-xl backdrop-blur-sm ${status !== 'generating' && 'opacity-50'}`}>
+              <span className="mt-1 text-xl">✍️</span>
+              <div className="w-full">
+                <div className="font-semibold mb-2 text-gray-900">回答を生成しています</div>
+                <div className="text-gray-600">
+                  ソースを翻訳し、回答を生成
                 </div>
               </div>
             </div>
 
-            <div className="flex items-start gap-4 p-6 bg-black/[0.02] rounded-xl backdrop-blur-sm">
-              <span className="mt-1 text-xl">✓</span>
-              <div>
-                <div className="font-semibold mb-2 text-gray-900">回答完了</div>
-                <div className="text-gray-600">ソースを翻訳し、回答を生成</div>
-              </div>
-            </div>
+            <GeneratedAnswer isCompleted={status === 'completed'} />
           </div>
         </div>
       </div>

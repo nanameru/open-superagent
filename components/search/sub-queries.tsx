@@ -6,10 +6,11 @@ interface QueryItem {
 
 interface SubQueriesProps {
   queries: QueryItem[];
-  onSelect: (query: string) => void;
+  onSelect?: (query: string) => void;
+  isLoading?: boolean;
 }
 
-export default function SubQueries({ queries, onSelect }: SubQueriesProps) {
+export default function SubQueries({ queries, onSelect, isLoading }: SubQueriesProps) {
   console.log('[SubQueries] Received queries:', queries);
 
   if (!queries || queries.length === 0) {
@@ -46,7 +47,7 @@ export default function SubQueries({ queries, onSelect }: SubQueriesProps) {
           return (
             <button
               key={index}
-              onClick={() => onSelect(cleanQuery)}
+              onClick={() => onSelect?.(cleanQuery)}
               className="group relative w-full px-4 py-3 bg-black/[0.02] hover:bg-black/[0.04] rounded-xl text-sm text-gray-900 transition-all duration-200 text-left backdrop-blur-sm"
             >
               <div className="flex items-center gap-2">
