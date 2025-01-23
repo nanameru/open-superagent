@@ -134,20 +134,14 @@ export default function ProcessDetails({
             </div>
           )}
 
-          {/* SNSコンテンツ検索セクション */}
-          <div className="mt-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="relative w-6 h-6 flex items-center justify-center">
-                <div className={`absolute inset-0 ${status === 'processing' ? 'animate-ping' : ''} rounded-full bg-blue-400 opacity-20`}></div>
-                <span>🔍</span>
+          {/* 検索完了後の結果表示 */}
+          {status !== 'processing' && cozeResults && cozeResults.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center gap-3 mb-4">
+                <span>✅</span>
+                <span className="text-sm text-gray-600">検索結果</span>
               </div>
-              <span className="text-sm text-gray-600">
-                {status === 'processing' ? 'SNSコンテンツを検索中...' : 'SNSコンテンツの検索結果'}
-              </span>
-            </div>
-
-            {/* Cozeレスポンスの表示 */}
-            {cozeResults && cozeResults.length > 0 && (
+              
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <span>📊</span>
@@ -171,8 +165,8 @@ export default function ProcessDetails({
                   )}
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* 回答生成中の表示 */}
           {status === 'generating' && (

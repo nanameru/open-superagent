@@ -152,8 +152,156 @@ function formatTwitterPost(rawPost: any): TwitterPost {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ストリームコンテンツをパースするヘルパー関数
+function parseStreamContent(content: string): any {
+  console.log('\n=== parseStreamContent ===');
+  console.log('Input content:', content);
+
+  try {
+    // イベントメッセージをスキップ
+    if (content.trim().startsWith('event:')) {
+      console.log('Skipping event message');
+      return null;
+    }
+
+    // データ部分を抽出（より柔軟な処理に）
+    const dataPrefix = 'data:';
+    if (!content.includes(dataPrefix)) {
+      // IDのみの行は正常なケース
+      if (content.trim().startsWith('id:')) {
+        return null;
+      }
+      console.log('No data prefix found in content:', content);
+      return null;
+    }
+
+    // データ部分の抽出を改善
+    const startIndex = content.indexOf(dataPrefix) + dataPrefix.length;
+    let jsonStr = content.slice(startIndex).trim();
+
+    // 空のデータをスキップ
+    if (!jsonStr || jsonStr === '{}') {
+      console.log('Empty data, skipping');
+      return null;
+    }
+
+    // debug_urlのみの応答は処理をスキップ
+    try {
+      const quickParse = JSON.parse(jsonStr);
+      if (quickParse && Object.keys(quickParse).length === 1 && quickParse.debug_url) {
+        console.log('Skipping debug_url only response');
+        return null;
+      }
+    } catch (e) {
+      // パースエラーは無視して続行
+    }
+
+    // 二重エスケープされたJSONを完全に正規化する関数
+    const unescapeJsonString = (str: string): string => {
+      if (typeof str !== 'string') {
+        return str;
+      }
+
+      // 文字列が引用符で囲まれている場合は取り除く
+      if (str.startsWith('"') && str.endsWith('"')) {
+        str = str.slice(1, -1);
+      }
+
+      // エスケープシーケンスを正規化
+      let result = str;
+      
+      // エスケープ解除を繰り返し適用（深いネストに対応）
+      let prevResult;
+      do {
+        prevResult = result;
+        result = result
+          // バックスラッシュの解除
+          .replace(/\\\\/g, '\\')
+          // クォートの解除
+          .replace(/\\"/g, '"')
+          // 改行文字の解除
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t')
+          // 不要な空白の削除
+          .replace(/\s+/g, ' ')
+          // 制御文字の削除
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+      } while (result !== prevResult); // 変更がなくなるまで繰り返す
+
+      return result.trim();
+    };
+
+    // JSONオブジェクトを再帰的に処理する関数
+    const processJsonObject = (obj: any): any => {
+      if (typeof obj === 'string') {
+        return unescapeJsonString(obj);
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(item => processJsonObject(item));
+      }
+      if (obj && typeof obj === 'object') {
+        const result: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+          result[key] = processJsonObject(value);
+        }
+        return result;
+      }
+      return obj;
+    };
+
+    try {
+      // 最初のJSONパース
+      const parsed = JSON.parse(jsonStr);
+
+      // contentプロパティの特別処理
+      if (parsed.content) {
+        try {
+          const unescapedContent = unescapeJsonString(parsed.content);
+          
+          // JSONとしてパース可能か確認
+          try {
+            const contentObj = JSON.parse(unescapedContent);
+            // パースできた場合は、さらにオブジェクト内の文字列を処理
+            return processJsonObject(contentObj);
+          } catch {
+            // パースできない場合は、エスケープ解除された文字列を返す
+            return unescapedContent;
+          }
+        } catch (contentError) {
+          console.error('Content processing error:', contentError);
+          return parsed.content;
+        }
+      }
+
+      // content以外のプロパティも処理
+      return processJsonObject(parsed);
+    } catch (error) {
+      console.error('JSON parse error:', error);
+      if (error instanceof SyntaxError) {
+        const match = error.message.match(/position (\d+)/);
+        if (match) {
+          const pos = parseInt(match[1]);
+          const context = jsonStr.substring(Math.max(0, pos - 50), pos) +
+            ' >>> ' + jsonStr.charAt(pos) + ' <<< ' +
+            jsonStr.substring(pos + 1, pos + 50);
+          console.error('Error context:', context);
+        }
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error in parseStreamContent:', error);
+    console.error('Problematic content:', content);
+    return null;
+  }
+}
+
 async function processStreamResponse(response: Response, query: string): Promise<FormattedResponse> {
   const startTime = Date.now();
+  console.log('\n=== Starting processStreamResponse ===');
+  console.log('Query:', query);
+
   const formattedResponse: FormattedResponse = {
     query,
     posts: [],
@@ -165,95 +313,77 @@ async function processStreamResponse(response: Response, query: string): Promise
 
   try {
     const responseText = await response.text();
-    console.log('Raw response text:', responseText);
-
-    const lines = responseText.split('\n').filter(line => line.trim());
-    console.log('Filtered lines:', lines);
+    console.log('\n=== Raw Response ===');
+    console.log(responseText);
 
     const allPosts: TwitterPost[] = [];
     let newestId: string | undefined;
     let oldestId: string | undefined;
 
+    // レスポンステキストを行ごとに処理
+    const lines = responseText.split('\n').filter(line => line.trim());
+    console.log('\n=== Processing', lines.length, 'lines ===');
+
     for (const line of lines) {
       try {
-        const cleanedLine = line.trim();
-        console.log('\nProcessing line:', cleanedLine);
+        const parsedContent = parseStreamContent(line);
+        if (!parsedContent) continue;
 
-        if (!cleanedLine || cleanedLine === '[DONE]') {
-          console.log('Skipping empty or DONE line');
-          continue;
-        }
+        console.log('\n=== Parsed Content Structure ===');
+        console.log(JSON.stringify(parsedContent, null, 2));
 
-        // Handle event lines
-        if (cleanedLine.startsWith('event:')) {
-          const eventType = cleanedLine.replace('event:', '').trim();
-          console.log('Event type:', eventType);
-          if (eventType === 'Error') {
-            console.warn('Error event received from stream');
-            formattedResponse.error = 'Error event received from stream';
-          }
-          continue;
-        }
+        // 投稿データの抽出を改善
+        let posts: any[] = [];
 
-        // Handle data lines
-        if (!cleanedLine.startsWith('data:')) {
-          console.log('Skipping non-data line');
-          continue;
-        }
-
-        const dataContent = cleanedLine.replace('data:', '').trim();
-        console.log('Data content:', dataContent);
-
-        const data = JSON.parse(dataContent);
-        console.log('Parsed data:', JSON.stringify(data, null, 2));
-
-        if (data.content) {
-          try {
-            const content = JSON.parse(data.content);
-            console.log('Parsed content:', JSON.stringify(content, null, 2));
-
-            if (content.output?.[0]?.freeBusy?.post) {
-              const posts = Array.isArray(content.output[0].freeBusy.post)
-                ? content.output[0].freeBusy.post
-                : [content.output[0].freeBusy.post];
-
-              console.log('Found posts:', posts.length);
-              
-              for (const post of posts) {
-                console.log('Processing post:', post);
-                try {
-                  const formattedPost = formatTwitterPost(post);
-                  console.log('Formatted post:', formattedPost);
-                  allPosts.push(formattedPost);
-
-                  if (!newestId || formattedPost.id > newestId) newestId = formattedPost.id;
-                  if (!oldestId || formattedPost.id < oldestId) oldestId = formattedPost.id;
-                } catch (postError) {
-                  console.error('Error formatting post:', postError);
-                }
-              }
-            } else {
-              console.log('No posts found in content');
-            }
-          } catch (contentError) {
-            console.error('Error parsing content:', contentError);
-            formattedResponse.error = `Error parsing content: ${contentError instanceof Error ? contentError.message : String(contentError)}`;
-          }
-        } else if (data.response) {
-          // Handle text response
-          console.log('Found text response:', data.response);
-          const post = formatTwitterPost({
-            id: Date.now().toString(),
-            text: data.response,
-            created_at: new Date().toISOString(),
-            author: {
-              id: 'coze',
-              username: 'Coze AI',
-              name: 'Coze AI',
-              verified: true
+        // output配列の処理
+        if (parsedContent.output && Array.isArray(parsedContent.output)) {
+          // 各outputアイテムを処理
+          parsedContent.output.forEach((item: CozeOutputItem, index: number) => {
+            console.log(`\n=== Processing output[${index}] freeBusy ===`);
+            if (item?.freeBusy?.post) {
+              const currentPosts = Array.isArray(item.freeBusy.post)
+                ? item.freeBusy.post
+                : [item.freeBusy.post];
+              posts.push(...currentPosts);
             }
           });
-          allPosts.push(post);
+        }
+        // 直接のfreeBusy処理
+        else if (parsedContent.freeBusy?.post) {
+          console.log('\n=== Processing direct freeBusy ===');
+          const directPosts = Array.isArray(parsedContent.freeBusy.post)
+            ? parsedContent.freeBusy.post
+            : [parsedContent.freeBusy.post];
+          posts.push(...directPosts);
+        }
+
+        console.log(`\n=== Found ${posts.length} posts to process ===`);
+
+        // 各投稿の処理
+        for (let i = 0; i < posts.length; i++) {
+          const post = posts[i];
+          try {
+            console.log(`\n=== Processing post ${i + 1} of ${posts.length} ===`);
+            console.log(`Post ID: ${post.rest_id || 'unknown'}`);
+            console.log('Raw post:', JSON.stringify(post, null, 2));
+
+            const formattedPost = formatTwitterPost(post);
+            console.log('Formatted post:', JSON.stringify(formattedPost, null, 2));
+
+            // 重複チェック
+            const isDuplicate = allPosts.some(p => p.id === formattedPost.id);
+            if (!isDuplicate) {
+              allPosts.push(formattedPost);
+              console.log(`Added post ${formattedPost.id} to results`);
+
+              if (!newestId || formattedPost.id > newestId) newestId = formattedPost.id;
+              if (!oldestId || formattedPost.id < oldestId) oldestId = formattedPost.id;
+            } else {
+              console.log(`Skipping duplicate post ${formattedPost.id}`);
+            }
+          } catch (postError) {
+            console.error(`Error processing post ${i + 1}:`, postError);
+          }
         }
       } catch (lineError) {
         console.error('Error processing line:', lineError);
@@ -269,13 +399,26 @@ async function processStreamResponse(response: Response, query: string): Promise
       processing_time: Date.now() - startTime
     };
 
-    console.log('Final formatted response:', JSON.stringify(formattedResponse, null, 2));
+    console.log('\n=== Final Response ===');
+    console.log('Total posts:', allPosts.length);
+    console.log('Posts:', JSON.stringify(allPosts, null, 2));
+    console.log('Metadata:', JSON.stringify(formattedResponse.metadata, null, 2));
+
   } catch (error) {
     console.error('Error in processStreamResponse:', error);
     formattedResponse.error = error instanceof Error ? error.message : String(error);
   }
 
+  console.log('\n=== End processStreamResponse ===');
+  console.log('Processing time:', Date.now() - startTime, 'ms');
   return formattedResponse;
+}
+
+// Coze API output item interface
+interface CozeOutputItem {
+  freeBusy?: {
+    post: any | any[];  // Can be single post or array of posts
+  };
 }
 
 export async function executeCozeQueries(subQueries: string[]): Promise<FormattedResponse[]> {

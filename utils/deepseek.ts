@@ -68,14 +68,28 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
       
       try {
         console.log('[DeepSeek API] Attempting to parse response content:', content);
+        
+        // コードブロックと配列の装飾を削除
+        const cleanContent = content
+          .replace(/```json\s*|\s*```/g, '')  // コードブロックの削除
+          .trim();
+        
         let queries;
         try {
-          queries = JSON.parse(content);
+          queries = JSON.parse(cleanContent);
+          
+          // 配列の場合、実際のクエリオブジェクトのみをフィルタリング
+          if (Array.isArray(queries)) {
+            queries = queries.filter(q => {
+              if (!q || typeof q !== 'object') return false;
+              if (!q.query || typeof q.query !== 'string') return false;
+              return true;
+            });
+          }
         } catch (e) {
           console.error('[DeepSeek API] Failed to parse response as JSON:', e);
-          console.error('[DeepSeek API] Raw content that failed to parse:', content);
-          // コンテンツが配列でない場合は、改行で分割して配列にする
-          queries = content.split('\n').filter(line => line.trim());
+          console.error('[DeepSeek API] Raw content that failed to parse:', cleanContent);
+          return [];
         }
 
         // クエリが配列でない場合は配列に変換
@@ -84,13 +98,12 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
         }
 
         // クエリオブジェクトから文字列を抽出
-        const results = queries.map((q: any) => {
-          if (typeof q === 'string') return q;
-          if (typeof q === 'object' && q !== null) {
-            return q.query || Object.values(q)[0];
-          }
-          return String(q);
-        }).filter(q => q && typeof q === 'string');
+        const results = queries
+          .map((q: any) => {
+            if (!q || typeof q !== 'object') return null;
+            return q.query || null;
+          })
+          .filter((q): q is string => q !== null);
 
         console.log('[DeepSeek API] Successfully parsed queries:', results);
         return results;
