@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { generateSubQueries } from '@/utils/deepseek';
 import { executeCozeQueries } from '@/utils/coze';
+import { TwitterPost } from '@/utils/coze';
 import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
 import ProcessDetails from '@/components/search/process-details';
@@ -172,6 +173,48 @@ export default function SearchNewPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Xからの検索結果 */}
+              {status === 'processing' && (
+                <div className={`transition-all duration-500 ${status === 'processing' ? 'opacity-100' : status === 'thinking' ? 'opacity-0 translate-y-4' : 'opacity-60'}`}>
+                  <div className="group relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
+                    <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE]">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-6 h-6 flex items-center justify-center">
+                            <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                          <span className="text-sm font-medium text-black">Xから検索中...</span>
+                        </div>
+                        {cozeResults && cozeResults.length > 0 && (
+                          <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] text-[#666666]">
+                            {cozeResults.reduce((sum, result) => sum + (result.posts?.length || 0), 0)} 件
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 検索結果の表示 */}
+                      {cozeResults && cozeResults.length > 0 && (
+                        <div className="space-y-3 mt-2">
+                          {cozeResults.flatMap((result, resultIndex) => 
+                            (result.posts || []).map((post: TwitterPost, postIndex: number) => (
+                              <div 
+                                key={`${resultIndex}-${postIndex}`}
+                                className="p-3 bg-[#F8F8F8] rounded-lg hover:bg-[#F0F0F0] transition-colors"
+                              >
+                                <p className="text-sm text-[#333333] whitespace-pre-wrap">
+                                  {post.text}
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className={`transition-all duration-500 ${status === 'generating' ? 'opacity-100' : status === 'understanding' || status === 'thinking' ? 'opacity-0 translate-y-4' : 'opacity-60'}`}>
                 <div className="group relative">

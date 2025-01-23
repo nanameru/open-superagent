@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import SubQueries from './sub-queries';
 import PostList from './post-list';
-import ParsedPosts from './parsed-posts';
 import { FormattedResponse } from '@/utils/coze';
 
 interface ProcessDetailsProps {
@@ -26,10 +25,6 @@ export default function ProcessDetails({
   cozeResults
 }: ProcessDetailsProps) {
   useEffect(() => {
-    // 回答生成完了時にプロセス詳細を閉じる
-    if (status === 'completed' && isProcessExpanded) {
-      onToggleExpand();
-    }
     // Debug output with styling
     if (status === 'processing') {
       console.log(
@@ -46,7 +41,7 @@ export default function ProcessDetails({
       );
       console.log('結果:', cozeResults);
     }
-  }, [status, onToggleExpand, isProcessExpanded, cozeResults]);
+  }, [status, cozeResults]);
 
   return (
     <div className="space-y-4">
@@ -65,12 +60,7 @@ export default function ProcessDetails({
         </svg>
       </button>
 
-      <div
-        className={`
-          overflow-hidden transition-all duration-300 ease-in-out
-          ${isProcessExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}
-        `}
-      >
+      <div className={isProcessExpanded ? '' : 'hidden'}>
         <div className="space-y-4">
           {/* Understanding status */}
           <div className="flex items-center gap-3">
@@ -104,12 +94,85 @@ export default function ProcessDetails({
             </div>
           )}
 
-          {/* パース結果の表示 */}
-          {status === 'processing' && cozeResults && cozeResults.some(result => result.posts.length > 0) && (
+          {/* Xからの検索結果 */}
+          {status === 'processing' && (
             <div className="mt-4">
-              <ParsedPosts results={cozeResults} />
+              <div className="flex items-center gap-3 mb-4">
+                <div className="relative w-6 h-6 flex items-center justify-center">
+                  <div className="absolute inset-0 animate-ping rounded-full bg-blue-400 opacity-20"></div>
+                  <span>🔍</span>
+                </div>
+                <span className="text-sm text-gray-600">Xから検索中...</span>
+              </div>
+
+              {/* 検索結果の表示 */}
+              {cozeResults && cozeResults.length > 0 && (
+                <div className="mt-4 space-y-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <span>📊</span>
+                    <span>
+                      合計 {cozeResults.reduce((sum, result) => sum + (result.posts?.length || 0), 0)} 件の投稿を取得
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {cozeResults.flatMap((result, resultIndex) => 
+                      (result.posts || []).map((post, postIndex) => (
+                        <div 
+                          key={`${resultIndex}-${postIndex}`}
+                          className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                            {post.text}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
+          {/* SNSコンテンツ検索セクション */}
+          <div className="mt-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="relative w-6 h-6 flex items-center justify-center">
+                <div className={`absolute inset-0 ${status === 'processing' ? 'animate-ping' : ''} rounded-full bg-blue-400 opacity-20`}></div>
+                <span>🔍</span>
+              </div>
+              <span className="text-sm text-gray-600">
+                {status === 'processing' ? 'SNSコンテンツを検索中...' : 'SNSコンテンツの検索結果'}
+              </span>
+            </div>
+
+            {/* Cozeレスポンスの表示 */}
+            {cozeResults && cozeResults.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <span>📊</span>
+                  <span>
+                    合計 {cozeResults.reduce((sum, result) => sum + (result.posts?.length || 0), 0)} 件の投稿を取得
+                  </span>
+                </div>
+                
+                <div className="space-y-3">
+                  {cozeResults.flatMap((result, resultIndex) => 
+                    (result.posts || []).map((post, postIndex) => (
+                      <div 
+                        key={`${resultIndex}-${postIndex}`}
+                        className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          {post.text}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* 回答生成中の表示 */}
           {status === 'generating' && (
