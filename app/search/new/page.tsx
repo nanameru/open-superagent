@@ -17,6 +17,7 @@ export default function SearchNewPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'understanding' | 'thinking' | 'processing' | 'generating' | 'completed'>('understanding');
   const [isProcessExpanded, setIsProcessExpanded] = useState(true);
+  const [totalPosts, setTotalPosts] = useState<number>(0);
 
   useEffect(() => {
     const searchQuery = searchParams.get('q');
@@ -62,6 +63,18 @@ export default function SearchNewPage() {
     }
   }, [status]);
 
+  useEffect(() => {
+    // cozeResultsが更新されるたびに実行
+    if (cozeResults && cozeResults.length > 0) {
+      const total = cozeResults.reduce((sum, result) => {
+        // metadata.total_countから投稿数を取得
+        return sum + (result?.metadata?.total_count || 0);
+      }, 0);
+      console.log('Total posts found:', total); // デバッグ用
+      setTotalPosts(total);
+    }
+  }, [cozeResults]);
+
   const statusSteps = [
     { key: 'understanding', icon: '💭', label: '理解' },
     { key: 'thinking', icon: '💡', label: '分析' },
@@ -93,7 +106,7 @@ export default function SearchNewPage() {
           <div className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 text-gray-600">
               <span className="w-1 h-1 rounded-full bg-gray-900"></span>
-              {subQueries.length}ソース
+              {totalPosts}ソース
             </span>
             <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 text-gray-600">
               <span className="w-1 h-1 rounded-full bg-gray-900"></span>
@@ -189,7 +202,7 @@ export default function SearchNewPage() {
                         </div>
                         {cozeResults && cozeResults.length > 0 && (
                           <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] text-[#666666]">
-                            {cozeResults.reduce((sum, result) => sum + (result.posts?.length || 0), 0)} 件
+                            {totalPosts} 件
                           </span>
                         )}
                       </div>
