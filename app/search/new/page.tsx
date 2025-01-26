@@ -24,6 +24,12 @@ export default function SearchNewPage() {
   useEffect(() => {
     const searchQuery = searchParams.get('q');
     if (searchQuery) {
+      // 新しい検索開始時にデータをクリア
+      setAggregatedPosts(new Set());
+      setSubQueries([]);
+      setCozeResults([]);
+      setProcessedResults(new Set());
+      
       setQuery(searchQuery);
       setIsLoading(true);
       setStatus('understanding');
@@ -313,7 +319,11 @@ export default function SearchNewPage() {
                   <span className="text-sm font-medium text-black">回答を生成しました</span>
                 </div>
               </div>
-              <GeneratedAnswer isCompleted={status === 'completed'} posts={aggregatedPosts} />
+              <GeneratedAnswer 
+                isCompleted={status === 'completed'} 
+                posts={aggregatedPosts}
+                searchQuery={query}  
+              />
             </div>
           </div>
         </div>

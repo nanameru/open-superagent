@@ -1,12 +1,13 @@
 'use server';
 
-import OpenAI from 'openai';
-
 export async function generateSubQueries(userQuery: string): Promise<string[]> {
   const MAX_RETRIES = 3;
-  const TIMEOUT = 30000; // 30 seconds
+  const TIMEOUT = 60000; // 60 seconds に延長
 
   const makeRequest = async (attempt: number = 1): Promise<string[]> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+
     try {
       console.log(`[DeepSeek API] Attempt ${attempt} - Starting request`);
       
@@ -18,16 +19,11 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
       }
       
       console.log(`[DeepSeek API] Using API key: ${apiKey ? '✓ Present' : '✗ Missing'}`);
-      
-      const openai = new OpenAI({
-        apiKey: apiKey,
-        baseURL: 'https://api.deepseek.com',
-        timeout: TIMEOUT,
-      });
 
       const currentDate = new Date().toISOString().split('T')[0];
-      const prompt = `あなたは「PitattoAI」のサブクエリ生成アシスタントです。
-
+      const systemPrompt = `あなたは「PitattoAI」のサブクエリ生成アシスタントです。`;
+      
+      const userPrompt = `
 <<USER_QUERY>> = "${userQuery}"
 <<CURRENT_DATE>> = ${currentDate}
 
@@ -45,19 +41,34 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
    - lang:en → min_faves:500
    - lang:zh → min_faves:300
 5. 出力は **1つのJSON配列** のみ、要素数6～10個。各要素は \`{"query": "..."} \` のみ。解説や文章は一切付けない。キーワードに国名は入れない。`;
-      
-      console.log('[DeepSeek API] Sending request with prompt:', prompt);
-      
-      const response = await openai.chat.completions.create({
-        model: "deepseek-reasoner",
-        messages: [
-          { role: "user", content: prompt }
-        ],
-        max_tokens: 4000,
-        stream: false
+
+      const response = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          stream: false
+        }),
+        signal: controller.signal
       });
 
-      const content = response.choices[0].message.content;
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('[DeepSeek API] Error response:', errorData);
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices[0].message.content;
       
       console.log('[DeepSeek API] Final content:', content);
 
@@ -114,13 +125,26 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
       }
       
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error(`[DeepSeek API] Error on attempt ${attempt}:`, error);
+      
       if (error instanceof Error) {
         console.error('[DeepSeek API] Error details:', {
           name: error.name,
           message: error.message,
           stack: error.stack
         });
+
+        // AbortError（タイムアウト）の場合は特別なハンドリング
+        if (error.name === 'AbortError') {
+          console.error('[DeepSeek API] Request timed out');
+          if (attempt < MAX_RETRIES) {
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+            console.log(`[DeepSeek API] Retrying after timeout in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return makeRequest(attempt + 1);
+          }
+        }
       }
       
       if (attempt < MAX_RETRIES) {
@@ -136,35 +160,4 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
   };
 
   return makeRequest();
-}
-
-export async function generateSummary(content: string): Promise<string> {
-  const prompt = `以下の投稿内容を要約して、重要なポイントをまとめた記事を生成してください：
-
-${content}
-
-要約は以下の形式で出力してください：
-1. 全体の要約（3-4文）
-2. 重要なポイント（箇条書き）
-3. 結論`;
-
-  try {
-    const response = await fetch('/api/deepseek', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ prompt }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to generate summary');
-    }
-
-    const data = await response.json();
-    return data.response;
-  } catch (error) {
-    console.error('Error in generateSummary:', error);
-    throw error;
-  }
 }

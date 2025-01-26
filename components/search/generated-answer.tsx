@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { TwitterPost } from '@/utils/coze';
-import { generateArticle } from '@/utils/deepseek-article';
+import { generateDetailedArticle } from '@/utils/deepseek-article';
 
 interface GeneratedAnswerProps {
   isCompleted?: boolean;
   posts?: Set<TwitterPost>;
+  searchQuery: string;
 }
 
-export default function GeneratedAnswer({ isCompleted, posts }: GeneratedAnswerProps) {
+export default function GeneratedAnswer({ isCompleted, posts, searchQuery }: GeneratedAnswerProps) {
   const [generatedAnswer, setGeneratedAnswer] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -19,7 +20,7 @@ export default function GeneratedAnswer({ isCompleted, posts }: GeneratedAnswerP
       const postsArray = Array.from(posts);
       const postsContent = postsArray.map(post => post.text).join('\n');
       
-      generateArticle(postsContent)
+      generateDetailedArticle(postsContent, searchQuery)
         .then((response) => {
           if (response.error) {
             console.error('Error generating article:', response.error);
@@ -36,7 +37,7 @@ export default function GeneratedAnswer({ isCompleted, posts }: GeneratedAnswerP
           setIsGenerating(false);
         });
     }
-  }, [isCompleted, posts]);
+  }, [isCompleted, posts, searchQuery]);
 
   if (!isCompleted) return null;
 
