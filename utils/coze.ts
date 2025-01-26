@@ -155,144 +155,63 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // ストリームコンテンツをパースするヘルパー関数
 function parseStreamContent(content: string): any {
   console.log('\n=== parseStreamContent ===');
-  console.log('Input content:', content);
+  console.log('Input content length:', content.length);
 
   try {
     // イベントメッセージをスキップ
     if (content.trim().startsWith('event:')) {
-      console.log('Skipping event message');
+      console.log('Skipping event message:', content.trim());
       return null;
     }
 
-    // データ部分を抽出（より柔軟な処理に）
+    // データ部分を抽出
     const dataPrefix = 'data:';
     if (!content.includes(dataPrefix)) {
-      // IDのみの行は正常なケース
       if (content.trim().startsWith('id:')) {
+        console.log('Skipping ID-only line:', content.trim());
         return null;
       }
-      console.log('No data prefix found in content:', content);
+      console.log('No data prefix found in content');
       return null;
     }
 
-    // データ部分の抽出を改善
+    // データ部分の抽出
     const startIndex = content.indexOf(dataPrefix) + dataPrefix.length;
     let jsonStr = content.slice(startIndex).trim();
-
-    // 空のデータをスキップ
-    if (!jsonStr || jsonStr === '{}') {
-      console.log('Empty data, skipping');
-      return null;
-    }
-
-    // debug_urlのみの応答は処理をスキップ
-    try {
-      const quickParse = JSON.parse(jsonStr);
-      if (quickParse && Object.keys(quickParse).length === 1 && quickParse.debug_url) {
-        console.log('Skipping debug_url only response');
-        return null;
-      }
-    } catch (e) {
-      // パースエラーは無視して続行
-    }
-
-    // 二重エスケープされたJSONを完全に正規化する関数
-    const unescapeJsonString = (str: string): string => {
-      if (typeof str !== 'string') {
-        return str;
-      }
-
-      // 文字列が引用符で囲まれている場合は取り除く
-      if (str.startsWith('"') && str.endsWith('"')) {
-        str = str.slice(1, -1);
-      }
-
-      // エスケープシーケンスを正規化
-      let result = str;
-      
-      // エスケープ解除を繰り返し適用（深いネストに対応）
-      let prevResult;
-      do {
-        prevResult = result;
-        result = result
-          // バックスラッシュの解除
-          .replace(/\\\\/g, '\\')
-          // クォートの解除
-          .replace(/\\"/g, '"')
-          // 改行文字の解除
-          .replace(/\\n/g, '\n')
-          .replace(/\\r/g, '\r')
-          .replace(/\\t/g, '\t')
-          // 不要な空白の削除
-          .replace(/\s+/g, ' ')
-          // 制御文字の削除
-          .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
-      } while (result !== prevResult); // 変更がなくなるまで繰り返す
-
-      return result.trim();
-    };
-
-    // JSONオブジェクトを再帰的に処理する関数
-    const processJsonObject = (obj: any): any => {
-      if (typeof obj === 'string') {
-        return unescapeJsonString(obj);
-      }
-      if (Array.isArray(obj)) {
-        return obj.map(item => processJsonObject(item));
-      }
-      if (obj && typeof obj === 'object') {
-        const result: any = {};
-        for (const [key, value] of Object.entries(obj)) {
-          result[key] = processJsonObject(value);
-        }
-        return result;
-      }
-      return obj;
-    };
+    console.log('First parse - extracted JSON string length:', jsonStr.length);
 
     try {
       // 最初のJSONパース
-      const parsed = JSON.parse(jsonStr);
-
-      // contentプロパティの特別処理
-      if (parsed.content) {
-        try {
-          const unescapedContent = unescapeJsonString(parsed.content);
-          
-          // JSONとしてパース可能か確認
-          try {
-            const contentObj = JSON.parse(unescapedContent);
-            // パースできた場合は、さらにオブジェクト内の文字列を処理
-            return processJsonObject(contentObj);
-          } catch {
-            // パースできない場合は、エスケープ解除された文字列を返す
-            return unescapedContent;
-          }
-        } catch (contentError) {
-          console.error('Content processing error:', contentError);
-          return parsed.content;
-        }
+      const firstParse = JSON.parse(jsonStr);
+      
+      // contentプロパティが文字列として存在する場合は二重パース
+      if (firstParse.content && typeof firstParse.content === 'string') {
+        console.log('Found nested content, performing second parse');
+        const secondParse = JSON.parse(firstParse.content);
+        console.log('Second parse successful, data structure:', 
+          Object.keys(secondParse));
+        return secondParse;
       }
 
-      // content以外のプロパティも処理
-      return processJsonObject(parsed);
-    } catch (error) {
-      console.error('JSON parse error:', error);
-      if (error instanceof SyntaxError) {
-        const match = error.message.match(/position (\d+)/);
-        if (match) {
-          const pos = parseInt(match[1]);
-          const context = jsonStr.substring(Math.max(0, pos - 50), pos) +
-            ' >>> ' + jsonStr.charAt(pos) + ' <<< ' +
-            jsonStr.substring(pos + 1, pos + 50);
-          console.error('Error context:', context);
-        }
+      // debug_urlのみの応答は処理をスキップ
+      if (firstParse && Object.keys(firstParse).length === 1 && firstParse.debug_url) {
+        console.log('Skipping debug_url only response');
+        return null;
       }
-      throw error;
+
+      // エラーレスポンスの確認
+      if (firstParse.error_code) {
+        console.log('Error response detected:', firstParse.error_message);
+        return null;
+      }
+
+      return firstParse;
+    } catch (parseError) {
+      console.log('JSON parse error:', parseError);
+      return null;
     }
-  } catch (error) {
-    console.error('Error in parseStreamContent:', error);
-    console.error('Problematic content:', content);
+  } catch (e) {
+    console.error('Error in parseStreamContent:', e);
     return null;
   }
 }
@@ -314,7 +233,7 @@ async function processStreamResponse(response: Response, query: string): Promise
   try {
     const responseText = await response.text();
     console.log('\n=== Raw Response ===');
-    console.log(responseText);
+    console.log('Response text length:', responseText.length);
 
     const allPosts: TwitterPost[] = [];
     let newestId: string | undefined;
@@ -327,91 +246,62 @@ async function processStreamResponse(response: Response, query: string): Promise
     for (const line of lines) {
       try {
         const parsedContent = parseStreamContent(line);
-        if (!parsedContent) continue;
+        if (!parsedContent) {
+          continue;
+        }
 
-        console.log('\n=== Parsed Content Structure ===');
-        console.log(JSON.stringify(parsedContent, null, 2));
-
-        // 投稿データの抽出を改善
-        let posts: any[] = [];
-
-        // output配列の処理
+        // outputの配列を処理
         if (parsedContent.output && Array.isArray(parsedContent.output)) {
-          // 各outputアイテムを処理
-          parsedContent.output.forEach((item: CozeOutputItem, index: number) => {
-            console.log(`\n=== Processing output[${index}] freeBusy ===`);
+          console.log('Processing output array, length:', parsedContent.output.length);
+          
+          for (const item of parsedContent.output) {
             if (item?.freeBusy?.post) {
-              const currentPosts = Array.isArray(item.freeBusy.post)
-                ? item.freeBusy.post
+              const posts = Array.isArray(item.freeBusy.post) 
+                ? item.freeBusy.post 
                 : [item.freeBusy.post];
-              posts.push(...currentPosts);
+              
+              console.log(`Found ${posts.length} posts in output item`);
+              
+              for (const post of posts) {
+                try {
+                  const formattedPost = formatTwitterPost(post);
+                  if (!allPosts.some(p => p.id === formattedPost.id)) {
+                    allPosts.push(formattedPost);
+                    console.log(`Added post ${formattedPost.id} to results (total: ${allPosts.length})`);
+
+                    if (!newestId || formattedPost.id > newestId) newestId = formattedPost.id;
+                    if (!oldestId || formattedPost.id < oldestId) oldestId = formattedPost.id;
+                  }
+                } catch (postError) {
+                  console.error('Error formatting post:', postError);
+                }
+              }
             }
-          });
-        }
-        // 直接のfreeBusy処理
-        else if (parsedContent.freeBusy?.post) {
-          console.log('\n=== Processing direct freeBusy ===');
-          const directPosts = Array.isArray(parsedContent.freeBusy.post)
-            ? parsedContent.freeBusy.post
-            : [parsedContent.freeBusy.post];
-          posts.push(...directPosts);
-        }
-
-        console.log(`\n=== Found ${posts.length} posts to process ===`);
-
-        // 各投稿の処理
-        for (let i = 0; i < posts.length; i++) {
-          const post = posts[i];
-          try {
-            console.log(`\n=== Processing post ${i + 1} of ${posts.length} ===`);
-            console.log(`Post ID: ${post.rest_id || 'unknown'}`);
-            console.log('Raw post:', JSON.stringify(post, null, 2));
-
-            const formattedPost = formatTwitterPost(post);
-            console.log('Formatted post:', JSON.stringify(formattedPost, null, 2));
-
-            // 重複チェック
-            const isDuplicate = allPosts.some(p => p.id === formattedPost.id);
-            if (!isDuplicate) {
-              allPosts.push(formattedPost);
-              console.log(`Added post ${formattedPost.id} to results`);
-
-              if (!newestId || formattedPost.id > newestId) newestId = formattedPost.id;
-              if (!oldestId || formattedPost.id < oldestId) oldestId = formattedPost.id;
-            } else {
-              console.log(`Skipping duplicate post ${formattedPost.id}`);
-            }
-          } catch (postError) {
-            console.error(`Error processing post ${i + 1}:`, postError);
           }
         }
       } catch (lineError) {
         console.error('Error processing line:', lineError);
-        continue;
       }
     }
 
+    // 結果を設定
     formattedResponse.posts = allPosts;
     formattedResponse.metadata = {
       total_count: allPosts.length,
+      processing_time: Date.now() - startTime,
       newest_id: newestId,
-      oldest_id: oldestId,
-      processing_time: Date.now() - startTime
+      oldest_id: oldestId
     };
 
     console.log('\n=== Final Response ===');
     console.log('Total posts:', allPosts.length);
-    console.log('Posts:', JSON.stringify(allPosts, null, 2));
-    console.log('Metadata:', JSON.stringify(formattedResponse.metadata, null, 2));
+    console.log('Processing time:', formattedResponse.metadata.processing_time, 'ms');
 
+    return formattedResponse;
   } catch (error) {
     console.error('Error in processStreamResponse:', error);
-    formattedResponse.error = error instanceof Error ? error.message : String(error);
+    throw error;
   }
-
-  console.log('\n=== End processStreamResponse ===');
-  console.log('Processing time:', Date.now() - startTime, 'ms');
-  return formattedResponse;
 }
 
 // Coze API output item interface

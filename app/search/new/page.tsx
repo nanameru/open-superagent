@@ -14,10 +14,12 @@ export default function SearchNewPage() {
   const [query, setQuery] = useState<string>('');
   const [subQueries, setSubQueries] = useState<Array<{ query: string }>>([]);
   const [cozeResults, setCozeResults] = useState<any[]>([]);
+  const [aggregatedPosts, setAggregatedPosts] = useState<Set<TwitterPost>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'understanding' | 'thinking' | 'processing' | 'generating' | 'completed'>('understanding');
   const [isProcessExpanded, setIsProcessExpanded] = useState(true);
   const [totalPosts, setTotalPosts] = useState<number>(0);
+  const [processedResults, setProcessedResults] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const searchQuery = searchParams.get('q');
@@ -29,6 +31,19 @@ export default function SearchNewPage() {
       setTimeout(() => {
         setStatus('thinking');
         setTimeout(() => {
+          // 新しい投稿を集約する関数
+          const aggregatePostsFunc = (newResults: any[]) => {
+            setAggregatedPosts(prevPosts => {
+              const updatedPosts = new Set(prevPosts);
+              newResults.forEach(result => {
+                result.posts.forEach((post: TwitterPost) => {
+                  updatedPosts.add(post);
+                });
+              });
+              return updatedPosts;
+            });
+          };
+
           generateSubQueries(searchQuery)
             .then((response) => {
               const formattedQueries = response.map(query => ({ query }));
@@ -40,6 +55,7 @@ export default function SearchNewPage() {
             })
             .then((results) => {
               setCozeResults(results);
+              aggregatePostsFunc(results);
               setStatus('generating');
               setTimeout(() => {
                 setStatus('completed');
@@ -66,14 +82,34 @@ export default function SearchNewPage() {
   useEffect(() => {
     // cozeResultsが更新されるたびに実行
     if (cozeResults && cozeResults.length > 0) {
-      const total = cozeResults.reduce((sum, result) => {
-        // metadata.total_countから投稿数を取得
-        return sum + (result?.metadata?.total_count || 0);
-      }, 0);
-      console.log('Total posts found:', total); // デバッグ用
-      setTotalPosts(total);
+      // 新しい結果のみを処理
+      const newResults = cozeResults.filter(result => {
+        // クエリをIDとして使用
+        const resultId = result.query;
+        if (!processedResults.has(resultId)) {
+          setProcessedResults(prev => new Set(Array.from(prev).concat(resultId)));
+          return true;
+        }
+        return false;
+      });
+
+      if (newResults.length > 0) {
+        const newTotal = newResults.reduce((sum, result) => {
+          return sum + (result?.metadata?.total_count || 0);
+        }, 0);
+        
+        console.log('New posts found:', newTotal); // デバッグ用
+        setTotalPosts(prev => prev + newTotal);
+      }
     }
   }, [cozeResults]);
+
+  useEffect(() => {
+    if (searchParams.get('q')) {
+      setTotalPosts(0);
+      setProcessedResults(new Set());
+    }
+  }, [searchParams]);
 
   const statusSteps = [
     { key: 'understanding', icon: '💭', label: '理解' },
@@ -277,7 +313,7 @@ export default function SearchNewPage() {
                   <span className="text-sm font-medium text-black">回答を生成しました</span>
                 </div>
               </div>
-              <GeneratedAnswer isCompleted={status === 'completed'} />
+              <GeneratedAnswer isCompleted={status === 'completed'} posts={aggregatedPosts} />
             </div>
           </div>
         </div>

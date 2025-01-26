@@ -137,3 +137,34 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
 
   return makeRequest();
 }
+
+export async function generateSummary(content: string): Promise<string> {
+  const prompt = `以下の投稿内容を要約して、重要なポイントをまとめた記事を生成してください：
+
+${content}
+
+要約は以下の形式で出力してください：
+1. 全体の要約（3-4文）
+2. 重要なポイント（箇条書き）
+3. 結論`;
+
+  try {
+    const response = await fetch('/api/deepseek', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate summary');
+    }
+
+    const data = await response.json();
+    return data.response;
+  } catch (error) {
+    console.error('Error in generateSummary:', error);
+    throw error;
+  }
+}
