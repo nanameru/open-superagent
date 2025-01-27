@@ -8,6 +8,7 @@ import { TwitterPost } from '@/utils/coze';
 import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
 import ProcessDetails from '@/components/search/process-details';
+import { SourceSidebar } from '@/components/search/source-sidebar';
 
 export default function SearchNewPage() {
   const searchParams = useSearchParams();
@@ -20,6 +21,7 @@ export default function SearchNewPage() {
   const [isProcessExpanded, setIsProcessExpanded] = useState(true);
   const [totalPosts, setTotalPosts] = useState<number>(0);
   const [processedResults, setProcessedResults] = useState<Set<string>>(new Set());
+  const [showSidebar, setShowSidebar] = useState(false);
 
   useEffect(() => {
     const searchQuery = searchParams.get('q');
@@ -299,7 +301,7 @@ export default function SearchNewPage() {
           </div>
         </div>
 
-        {/* 生成された回答 */}
+        {/* 生成された回答とサイドバー */}
         <div 
           className={`
             transition-all duration-700 ease-out transform
@@ -319,11 +321,19 @@ export default function SearchNewPage() {
                   <span className="text-sm font-medium text-black">回答を生成しました</span>
                 </div>
               </div>
-              <GeneratedAnswer 
-                isCompleted={status === 'completed'} 
-                posts={aggregatedPosts}
-                searchQuery={query}  
-              />
+              <div className="flex">
+                <GeneratedAnswer 
+                  isCompleted={status === 'completed'} 
+                  posts={aggregatedPosts}
+                  searchQuery={query}
+                  onShowSidebar={() => setShowSidebar(true)}
+                />
+                <SourceSidebar
+                  sources={Array.from(aggregatedPosts).map(post => post.text)}
+                  isVisible={showSidebar}
+                  onClose={() => setShowSidebar(false)}
+                />
+              </div>
             </div>
           </div>
         </div>
