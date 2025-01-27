@@ -113,10 +113,47 @@ export default function SearchNewPage() {
           };
 
           generateSubQueries(searchQuery)
-            .then((response) => {
+            .then(async (response) => {
               const formattedQueries = response.map(query => ({ query }));
               setSubQueries(formattedQueries);
               setStatus('processing');
+
+              // 親クエリのIDを取得
+              const supabase = createClient();
+              const { data: { session } } = await supabase.auth.getSession();
+              const { data: parentQuery } = await supabase
+                .from('queries')
+                .select('id')
+                .eq('query_text', searchQuery)
+                .eq('query_type', 'user')
+                .eq('user_id', session?.user?.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+              // サブクエリを保存
+              if (parentQuery?.id) {
+                const saveSubQueries = formattedQueries.map(async (q) => {
+                  try {
+                    const { error } = await supabase
+                      .from('queries')
+                      .insert({
+                        user_id: session?.user?.id,
+                        query_text: q.query,
+                        query_type: 'auto',
+                        parent_query_id: parentQuery.id
+                      });
+
+                    if (error) {
+                      console.error('[SearchNewPage] Error saving sub-query:', error);
+                    }
+                  } catch (error) {
+                    console.error('[SearchNewPage] Unexpected error saving sub-query:', error);
+                  }
+                });
+
+                await Promise.all(saveSubQueries);
+              }
               
               // Execute Coze queries in parallel
               return executeCozeQueries(formattedQueries.map(q => q.query));
