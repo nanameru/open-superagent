@@ -18,13 +18,19 @@ export const SourcePreview = ({ sources, onShowAll }: SourcePreviewProps) => {
             className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800"
           >
             Show all
-            <div className="flex -space-x-2">
-              {Array.from({ length: Math.min(6, sources.length) }).map((_, i) => (
-                <div
-                  key={i}
-                  className="w-6 h-6 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center text-xs"
-                />
+            <div className="flex -space-x-1.5">
+              {Array.from({ length: Math.min(5, sources.length) }).map((_, i) => (
+                <div key={i} className="w-5 h-5 rounded-full bg-black flex items-center justify-center ring-2 ring-white">
+                  <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                  </svg>
+                </div>
               ))}
+              {sources.length > 5 && (
+                <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center ring-2 ring-white">
+                  <span className="text-xs text-gray-600">+{sources.length - 5}</span>
+                </div>
+              )}
             </div>
           </button>
         )}
