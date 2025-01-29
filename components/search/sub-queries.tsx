@@ -2,6 +2,8 @@
 
 interface QueryItem {
   query: string;
+  query_type?: string;
+  query_text?: string;
 }
 
 interface SubQueriesProps {
@@ -23,7 +25,8 @@ export default function SubQueries({ queries, onSelect, isLoading }: SubQueriesP
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {queries.map((queryItem, index) => {
           // Clean up the query string
-          const cleanQuery = queryItem.query
+          const queryText = queryItem.query_text || queryItem.query;
+          const cleanQuery = queryText
             .replace(/```json\s*\[?\s*/g, '')
             .replace(/\s*\]?\s*```\s*$/, '')
             .replace(/[{}"\\]/g, '')

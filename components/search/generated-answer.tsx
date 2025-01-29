@@ -91,16 +91,6 @@ export default function GeneratedAnswer({
   return (
     <div className="flex-1">
       <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-2">
-          {isGenerating && (
-            <>
-              <span className="text-gray-600">{getPhaseText(currentPhase)}</span>
-              <div className="animate-spin h-4 w-4 border-2 border-gray-600 rounded-full border-t-transparent"></div>
-            </>
-          )}
-          {!isGenerating && <span className="text-green-600">生成完了</span>}
-        </div>
-        
         {error && (
           <div className="text-red-600">{error}</div>
         )}

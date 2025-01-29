@@ -24,141 +24,120 @@ export default function SearchNewPage() {
   const [processedResults, setProcessedResults] = useState<Set<string>>(new Set());
   const [showSidebar, setShowSidebar] = useState(false);
   const [languageCount, setLanguageCount] = useState<number>(0);
+  const [parentQueryData, setParentQueryData] = useState<any>(null);
+  const [dbSubQueries, setDbSubQueries] = useState<any[]>([]);
 
   useEffect(() => {
     const searchQuery = searchParams.get('q');
     if (searchQuery) {
-      // 新しい検索クエリをSupabaseに保存
-      const saveQuery = async () => {
+      const fetchQueriesFromDb = async () => {
         const supabase = createClient();
-        
+
         try {
-          console.log('[SearchNewPage] Initializing query save...');
-          
-          // セッションからユーザー情報を取得
+          // セッションの確認
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
-          console.log('[SearchNewPage] Session data:', session);
-          console.log('[SearchNewPage] Session error:', sessionError);
-          
           if (sessionError) {
-            console.error('[SearchNewPage] Session error:', sessionError);
+            console.error('Session error:', sessionError);
             return;
           }
 
           if (!session?.user?.id) {
-            console.error('[SearchNewPage] No user session found');
+            console.error('No user session found');
             return;
           }
 
-          console.log('[SearchNewPage] Attempting to save query with user_id:', session.user.id);
+          // 親クエリを取得
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // 今日の0時0分0秒に設定
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1); // 明日の0時0分0秒
 
-          const { data, error } = await supabase
+          const { data: parentQuery, error: parentError } = await supabase
             .from('queries')
-            .insert({
-              user_id: session.user.id,
-              query_text: searchQuery,
-              query_type: 'user',
-              parent_query_id: null
-            })
-            .select();
+            .select('*')
+            .eq('query_text', searchQuery)
+            .eq('query_type', 'user')
+            .eq('user_id', session.user.id)
+            .gte('created_at', today.toISOString())
+            .lt('created_at', tomorrow.toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1);
 
-          if (error) {
-            console.error('[SearchNewPage] Database error:', error);
+          if (parentError) {
+            console.error('Parent query fetch error:', parentError);
+            // エラーがあっても処理を継続
+            setQuery(searchQuery);
             return;
           }
 
-          console.log('[SearchNewPage] Query saved successfully:', data);
-        } catch (error) {
-          console.error('[SearchNewPage] Unexpected error:', error);
-          if (error instanceof Error) {
-            console.error('[SearchNewPage] Error details:', error.message);
-            console.error('[SearchNewPage] Error stack:', error.stack);
+          // データが存在するかチェック
+          if (parentQuery && parentQuery.length > 0) {
+            const firstParentQuery = parentQuery[0];
+            setParentQueryData(firstParentQuery);
+            setQuery(firstParentQuery.query_text);
+
+            // サブクエリを取得
+            const { data: subQueries, error: subError } = await supabase
+              .from('queries')
+              .select('*')
+              .eq('parent_query_id', firstParentQuery.id)
+              .eq('query_type', 'auto');
+
+            if (subError) {
+              console.error('Sub queries fetch error:', subError);
+              return;
+            }
+
+            if (subQueries) {
+              setDbSubQueries(subQueries);
+              setSubQueries(subQueries.map(q => ({ query: q.query_text })));
+            }
+          } else {
+            // 親クエリが見つからない場合は、検索クエリをそのまま使用
+            setQuery(searchQuery);
           }
+        } catch (error) {
+          console.error('Unexpected error:', error);
+          // エラーが発生しても検索クエリを設定
+          setQuery(searchQuery);
         }
       };
 
-      // 直接実行
-      saveQuery();
+      fetchQueriesFromDb();
 
       // 新しい検索開始時にデータをクリア
       setAggregatedPosts(new Set());
-      setSubQueries([]);
       setCozeResults([]);
       setProcessedResults(new Set());
       
-      setQuery(searchQuery);
       setIsLoading(true);
-      setStatus('understanding');
-      
-      setTimeout(() => {
-        setStatus('thinking');
-        setTimeout(() => {
-          // 新しい投稿を集約する関数
-          const aggregatePostsFunc = (newResults: any[]) => {
-            setAggregatedPosts(prevPosts => {
-              const updatedPosts = new Set(prevPosts);
-              newResults.forEach(result => {
-                result.posts.forEach((post: TwitterPost) => {
-                  // URLとドメイン情報を追加
-                  const postWithUrl = {
-                    ...post,
-                    url: `https://x.com/${post.author.username}/status/${post.id}`,
-                    domain: 'x.com'
-                  } as TwitterPost & { url: string; domain: string };
-                  updatedPosts.add(postWithUrl);
-                });
+
+      const startSearch = () => {
+        // 新しい投稿を集約する関数
+        const aggregatePostsFunc = (newResults: any[]) => {
+          setAggregatedPosts(prevPosts => {
+            const updatedPosts = new Set(prevPosts);
+            newResults.forEach(result => {
+              result.posts.forEach((post: TwitterPost) => {
+                // URLとドメイン情報を追加
+                const postWithUrl = {
+                  ...post,
+                  url: `https://x.com/${post.author.username}/status/${post.id}`,
+                  domain: 'x.com'
+                } as TwitterPost & { url: string; domain: string };
+                updatedPosts.add(postWithUrl);
               });
-              return updatedPosts;
             });
-          };
+            return updatedPosts;
+          });
+        };
 
-          generateSubQueries(searchQuery)
-            .then(async (response) => {
-              const formattedQueries = response.map(query => ({ query }));
-              setSubQueries(formattedQueries);
-              setStatus('processing');
-
-              // 親クエリのIDを取得
-              const supabase = createClient();
-              const { data: { session } } = await supabase.auth.getSession();
-              const { data: parentQuery } = await supabase
-                .from('queries')
-                .select('id')
-                .eq('query_text', searchQuery)
-                .eq('query_type', 'user')
-                .eq('user_id', session?.user?.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-
-              // サブクエリを保存
-              if (parentQuery?.id) {
-                const saveSubQueries = formattedQueries.map(async (q) => {
-                  try {
-                    const { error } = await supabase
-                      .from('queries')
-                      .insert({
-                        user_id: session?.user?.id,
-                        query_text: q.query,
-                        query_type: 'auto',
-                        parent_query_id: parentQuery.id
-                      });
-
-                    if (error) {
-                      console.error('[SearchNewPage] Error saving sub-query:', error);
-                    }
-                  } catch (error) {
-                    console.error('[SearchNewPage] Unexpected error saving sub-query:', error);
-                  }
-                });
-
-                await Promise.all(saveSubQueries);
-              }
-              
-              // Execute Coze queries in parallel
-              return executeCozeQueries(formattedQueries.map(q => q.query));
-            })
+        if (dbSubQueries.length > 0) {
+          // データベースにサブクエリが存在する場合
+          setStatus('processing');
+          const formattedQueries = dbSubQueries.map(q => ({ query: q.query_text }));
+          executeCozeQueries(formattedQueries.map(q => q.query))
             .then((results) => {
               setCozeResults(results);
               aggregatePostsFunc(results);
@@ -168,14 +147,85 @@ export default function SearchNewPage() {
               }, 1000);
             })
             .catch((error) => {
-              console.error('Error generating sub-queries:', error);
-              setSubQueries([]);
+              console.error('Error executing queries:', error);
             })
             .finally(() => {
               setIsLoading(false);
             });
-        }, 1000);
-      }, 1000);
+        } else {
+          // データベースにサブクエリが存在しない場合は通常のフロー
+          setStatus('understanding');
+          setTimeout(() => {
+            setStatus('thinking');
+            setTimeout(() => {
+              generateSubQueries(searchQuery)
+                .then(async (response) => {
+                  const formattedQueries = response.map(query => ({ query }));
+                  setSubQueries(formattedQueries);
+                  setStatus('processing');
+
+                  // 親クエリのIDを取得
+                  const supabase = createClient();
+                  const { data: { session } } = await supabase.auth.getSession();
+                  const { data: parentQuery } = await supabase
+                    .from('queries')
+                    .select('id')
+                    .eq('query_text', searchQuery)
+                    .eq('query_type', 'user')
+                    .eq('user_id', session?.user?.id)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                  // サブクエリを保存
+                  if (parentQuery?.id) {
+                    const saveSubQueries = formattedQueries.map(async (q) => {
+                      try {
+                        const { error } = await supabase
+                          .from('queries')
+                          .insert({
+                            user_id: session?.user?.id,
+                            query_text: q.query,
+                            query_type: 'auto',
+                            parent_query_id: parentQuery.id
+                          });
+
+                        if (error) {
+                          console.error('[SearchNewPage] Error saving sub-query:', error);
+                        }
+                      } catch (error) {
+                        console.error('[SearchNewPage] Unexpected error saving sub-query:', error);
+                      }
+                    });
+
+                    await Promise.all(saveSubQueries);
+                  }
+                  
+                  // Execute Coze queries in parallel
+                  return executeCozeQueries(formattedQueries.map(q => q.query));
+                })
+                .then((results) => {
+                  setCozeResults(results);
+                  aggregatePostsFunc(results);
+                  setStatus('generating');
+                  setTimeout(() => {
+                    setStatus('completed');
+                  }, 1000);
+                })
+                .catch((error) => {
+                  console.error('Error generating sub-queries:', error);
+                  setSubQueries([]);
+                })
+                .finally(() => {
+                  setIsLoading(false);
+                });
+            }, 1000);
+          }, 1000);
+        }
+      };
+
+      // 検索を開始
+      startSearch();
     }
   }, [searchParams]);
 
@@ -247,20 +297,22 @@ export default function SearchNewPage() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* ヘッダー */}
         <div className="flex justify-center mb-12">
-          <div className="w-2/3">
+          <div className="w-[75%]">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="relative">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="relative flex-shrink-0">
                   <div className="absolute inset-0 bg-gray-900/10 blur-md opacity-20"></div>
-                  <span className="relative bg-gray-900/10 text-gray-900 px-3 py-1.5 rounded-lg text-[13px] font-medium tracking-wide border border-gray-900/20">
+                  <span className="relative bg-gray-900/10 text-gray-900 px-3 py-1.5 rounded-lg text-[13px] font-medium tracking-wide border border-gray-900/20 whitespace-nowrap">
                     Pro Search
                   </span>
                 </div>
-                <h1 className="text-xl font-medium tracking-tight text-gray-900">
-                  {query}
-                </h1>
+                {parentQueryData && (
+                  <h1 className="text-xl font-medium tracking-tight text-gray-900 truncate">
+                    {parentQueryData.query_text}
+                  </h1>
+                )}
               </div>
-              <div className="flex items-center gap-4 text-xs">
+              <div className="flex items-center gap-4 text-xs flex-shrink-0 ml-4">
                 <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 text-gray-600">
                   <span className="w-1 h-1 rounded-full bg-gray-900"></span>
                   {totalPosts}ソース
@@ -277,7 +329,7 @@ export default function SearchNewPage() {
         {/* メインコンテンツを横並びに */}
         <div className={`flex gap-8 ${!showSidebar ? 'justify-center' : ''}`}>
           {/* 左カラム: プロセスの詳細 */}
-          <div className="w-2/3 transition-all duration-300">
+          <div className="w-[75%] transition-all duration-300">
             {/* プロセスの詳細セクション */}
             <div className="relative mb-8">
               <button
@@ -305,8 +357,8 @@ export default function SearchNewPage() {
                   <div className={`transition-all duration-500 ${status === 'understanding' ? 'opacity-100' : 'opacity-60'}`}>
                     <div className="group relative">
                       <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                      <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE]">
-                        <div className="flex items-center gap-3">
+                      <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] min-h-[72px] flex items-center">
+                        <div className="flex items-center gap-3 w-full">
                           <div className="relative w-6 h-6 flex items-center justify-center">
                             {status === 'understanding' || status === 'thinking' || status === 'generating' ? (
                               <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
@@ -355,8 +407,8 @@ export default function SearchNewPage() {
                     <div className={`transition-all duration-500 ${status === 'processing' ? 'opacity-100' : status === 'thinking' ? 'opacity-0 translate-y-4' : 'opacity-60'}`}>
                       <div className="group relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                        <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE]">
-                          <div className="flex items-center justify-between mb-4">
+                        <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] min-h-[72px] flex items-center">
+                          <div className="flex items-center justify-between w-full">
                             <div className="flex items-center gap-3">
                               <div className="relative w-6 h-6 flex items-center justify-center">
                                 <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
@@ -395,8 +447,8 @@ export default function SearchNewPage() {
                   <div className={`transition-all duration-500 ${status === 'generating' ? 'opacity-100' : status === 'understanding' || status === 'thinking' ? 'opacity-0 translate-y-4' : 'opacity-60'}`}>
                     <div className="group relative">
                       <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                      <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE]">
-                        <div className="flex items-center justify-between">
+                      <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] min-h-[72px] flex items-center">
+                        <div className="flex items-center justify-between w-full">
                           <div className="flex items-center gap-3">
                             <div className="relative w-6 h-6 flex items-center justify-center">
                               {status === 'generating' ? (
@@ -431,7 +483,7 @@ export default function SearchNewPage() {
 
           {/* 右カラム: ソースサイドバー */}
           {showSidebar && (
-            <div className="w-1/3 relative">
+            <div className="w-[25%] relative">
               <div className="sticky top-8">
                 <SourceSidebar
                   sources={Array.from(aggregatedPosts).map(post => ({
