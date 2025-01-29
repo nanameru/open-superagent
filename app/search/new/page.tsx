@@ -23,6 +23,7 @@ export default function SearchNewPage() {
   const [totalPosts, setTotalPosts] = useState<number>(0);
   const [processedResults, setProcessedResults] = useState<Set<string>>(new Set());
   const [showSidebar, setShowSidebar] = useState(false);
+  const [languageCount, setLanguageCount] = useState<number>(0);
 
   useEffect(() => {
     const searchQuery = searchParams.get('q');
@@ -216,6 +217,19 @@ export default function SearchNewPage() {
     }
   }, [searchParams]);
 
+  const updateLanguageCount = (queries: Array<{ query: string }>) => {
+    const languages = new Set<string>();
+    queries.forEach(queryItem => {
+      const lang = queryItem.query.match(/lang:(ja|en|zh)/)?.[1];
+      if (lang) languages.add(lang);
+    });
+    setLanguageCount(languages.size);
+  };
+
+  useEffect(() => {
+    updateLanguageCount(subQueries);
+  }, [subQueries]);
+
   const statusSteps = [
     { key: 'understanding', icon: '💭', label: '理解' },
     { key: 'thinking', icon: '💡', label: '分析' },
@@ -253,7 +267,7 @@ export default function SearchNewPage() {
                 </span>
                 <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 text-gray-600">
                   <span className="w-1 h-1 rounded-full bg-gray-900"></span>
-                  3言語
+                  {languageCount}言語
                 </span>
               </div>
             </div>

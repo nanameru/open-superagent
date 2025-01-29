@@ -20,7 +20,7 @@ export default function SubQueries({ queries, onSelect, isLoading }: SubQueriesP
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {queries.map((queryItem, index) => {
           // Clean up the query string
           const cleanQuery = queryItem.query
@@ -43,22 +43,30 @@ export default function SubQueries({ queries, onSelect, isLoading }: SubQueriesP
             zh: '🇨🇳',
           };
           const flagEmoji = lang ? langLabel[lang] : '';
+
+          // 表示用のテキストからパラメータを除去
+          const displayText = cleanQuery
+            .replace(/\s*lang:(ja|en|zh)\s*/g, ' ')
+            .replace(/\s*min_faves:\d+\s*/g, ' ')
+            .replace(/\s*since:\S+\s*/g, ' ')
+            .replace(/\s*until:\S+\s*/g, ' ')
+            .trim();
           
           return (
             <button
               key={index}
               onClick={() => onSelect?.(cleanQuery)}
-              className="group relative w-full px-4 py-3 bg-black/[0.02] hover:bg-black/[0.04] rounded-xl text-sm text-gray-900 transition-all duration-200 text-left backdrop-blur-sm"
+              className="group relative w-full px-3 py-2 bg-black/[0.02] hover:bg-black/[0.04] rounded-lg text-sm text-gray-900 transition-all duration-200 text-left backdrop-blur-sm"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {flagEmoji && (
                   <span className="text-xs opacity-50 group-hover:opacity-100 transition-opacity">
                     {flagEmoji}
                   </span>
                 )}
-                <span className="flex-1">{cleanQuery}</span>
+                <span className="flex-1 text-xs">{displayText}</span>
                 <svg 
-                  className="w-4 h-4 text-black/20 group-hover:text-black/40 transition-colors" 
+                  className="w-3.5 h-3.5 text-black/20 group-hover:text-black/40 transition-colors" 
                   fill="none" 
                   stroke="currentColor" 
                   viewBox="0 0 24 24" 
@@ -72,7 +80,7 @@ export default function SubQueries({ queries, onSelect, isLoading }: SubQueriesP
                   />
                 </svg>
               </div>
-              <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-black/[0.04] group-hover:ring-black/[0.08] transition-all duration-200" />
+              <div className="absolute inset-0 rounded-lg ring-1 ring-inset ring-black/[0.04] group-hover:ring-black/[0.08] transition-all duration-200" />
             </button>
           );
         })}
