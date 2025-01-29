@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { TwitterPost } from '@/utils/coze';
-import { generateDetailedArticle } from '@/utils/gemini-article';
+import { generateDetailedArticle } from '@/utils/meta-llama-3-70b-instruct-turbo-article';
 import { SourceList } from './source-list';
 import { SourcePreview } from './source-preview';
 
@@ -40,37 +40,31 @@ export default function GeneratedAnswer({
         console.log('Starting article generation with query:', searchQuery);
         console.log('Posts content length:', postsContent.length);
         
-        generateDetailedArticle(
-          postsContent, 
-          searchQuery,
-          (chunk) => {
-            if (!chunk || !chunk.content) {
-              console.warn('Received invalid chunk:', chunk);
-              return;
+        generateDetailedArticle(postsContent, searchQuery)
+          .then((response) => {
+            if (response.error) {
+              console.error('Error in article generation:', response.error);
+              setError(response.error);
+              setContent('');
+            } else {
+              console.log('Article generation completed successfully');
+              setContent(response.content);
             }
-            
-            setContent(prev => {
-              const newContent = prev + chunk.content;
-              console.log('Current content length:', newContent.length);
-              return newContent;
-            });
-          }
-        )
-        .then(() => {
-          console.log('Article generation completed successfully');
-          setIsGenerating(false);
-          setCurrentPhase(null);
-        })
-        .catch((error) => {
-          console.error('Detailed error in article generation:', error);
-          console.error('Error stack:', error.stack);
-          setContent('申し訳ありません。記事の生成中にエラーが発生しました。');
-          setIsGenerating(false);
-          setCurrentPhase(null);
-        });
+          })
+          .catch((error) => {
+            console.error('Detailed error in article generation:', error);
+            console.error('Error stack:', error.stack);
+            setError('申し訳ありません。記事の生成中にエラーが発生しました。');
+            setContent('');
+          })
+          .finally(() => {
+            setIsGenerating(false);
+            setCurrentPhase(null);
+          });
       } catch (error) {
         console.error('Error in useEffect:', error);
-        setContent('申し訳ありません。予期せぬエラーが発生しました。');
+        setError('申し訳ありません。予期せぬエラーが発生しました。');
+        setContent('');
         setIsGenerating(false);
         setCurrentPhase(null);
       }

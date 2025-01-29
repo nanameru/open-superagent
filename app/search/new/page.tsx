@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { generateSubQueries } from '@/utils/deepseek';
+import { generateSubQueries } from '@/utils/meta-llama-3-70b-instruct-turbo';
 import { executeCozeQueries } from '@/utils/coze';
 import { TwitterPost } from '@/utils/coze';
 import SubQueries from '@/components/search/sub-queries';
