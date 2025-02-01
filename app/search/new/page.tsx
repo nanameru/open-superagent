@@ -3,13 +3,27 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { generateSubQueries } from '@/utils/meta-llama-3-70b-instruct-turbo';
-import { executeCozeQueries } from '@/utils/coze';
+import { executeCozeQueries, updateRankingsForParentQuery, storeDataWithEmbedding } from '@/utils/coze';
 import { TwitterPost } from '@/utils/coze';
 import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
 import ProcessDetails from '@/components/search/process-details';
 import { SourceSidebar } from '@/components/search/source-sidebar';
 import { createClient } from '@/utils/supabase/client';
+
+// 型定義を追加
+type FetchedData = {
+  id: string;
+  content: string;
+  source_title: string;
+  source_url: string;
+  metadata?: Record<string, any>;
+};
+
+type SubQuery = {
+  query_text: string;
+  fetched_data?: FetchedData[];
+};
 
 export default function SearchNewPage() {
   const searchParams = useSearchParams();
@@ -77,10 +91,19 @@ export default function SearchNewPage() {
             setParentQueryData(firstParentQuery);
             setQuery(firstParentQuery.query_text);
 
-            // サブクエリを取得
+            // サブクエリと関連する結果を取得
             const { data: subQueries, error: subError } = await supabase
               .from('queries')
-              .select('*')
+              .select(`
+                *,
+                fetched_data (
+                  id,
+                  content,
+                  source_title,
+                  source_url,
+                  metadata
+                )
+              `)
               .eq('parent_query_id', firstParentQuery.id)
               .eq('query_type', 'auto');
 
@@ -89,21 +112,69 @@ export default function SearchNewPage() {
               return;
             }
 
-            if (subQueries) {
+            if (subQueries && subQueries.length > 0) {
               setDbSubQueries(subQueries);
-              setSubQueries(subQueries.map(q => ({ query: q.query_text })));
+              const formattedQueries = subQueries.map(q => ({ query: q.query_text }));
+              setSubQueries(formattedQueries);
+              
+              // 既存の結果を表示（型を明示的に指定）
+              const existingResults = (subQueries as SubQuery[]).map(subQuery => ({
+                query: subQuery.query_text,
+                posts: (subQuery.fetched_data || []).map(data => ({
+                  id: data.id,
+                  content: data.content,
+                  author: {
+                    username: data.source_title // source_titleをusernameとして使用
+                  },
+                  metadata: data.metadata
+                })),
+                sources: (subQuery.fetched_data || []).map((data: FetchedData) => ({
+                  title: data.source_title,
+                  url: data.source_url,
+                  content: data.content,
+                  ...(data.metadata || {})
+                }))
+              }));
+
+              setStatus('processing');
+              setCozeResults(existingResults);
+              
+              // 投稿を集約する前にデータ形式を調整
+              const adjustedResults = existingResults.map(result => ({
+                ...result,
+                posts: result.posts.map(post => ({
+                  ...post,
+                  url: post.metadata?.url || `https://example.com/${post.id}`,
+                  domain: new URL(post.metadata?.url || `https://example.com/${post.id}`).hostname
+                }))
+              }));
+              
+              aggregatePostsFunc(adjustedResults);
+              
+              // 少し遅延を入れて状態遷移をスムーズに
+              setTimeout(() => {
+                setStatus('generating');
+                setTimeout(() => {
+                  setStatus('completed');
+                }, 500);
+              }, 500);
+              
+              setIsLoading(false);
+            } else {
+              // 親クエリは存在するがサブクエリがない場合は新規生成
+              generateNewSubQueries(searchQuery, session?.user?.id, firstParentQuery.id);
             }
           } else {
-            // 親クエリが見つからない場合は、検索クエリをそのまま使用
-            setQuery(searchQuery);
+            // 親クエリが見つからない場合は、新規作成
+            createNewParentQuery(searchQuery, session?.user?.id);
           }
         } catch (error) {
           console.error('Unexpected error:', error);
-          // エラーが発生しても検索クエリを設定
           setQuery(searchQuery);
         }
       };
 
+      // 検索を開始
       fetchQueriesFromDb();
 
       // 新しい検索開始時にデータをクリア
@@ -112,120 +183,6 @@ export default function SearchNewPage() {
       setProcessedResults(new Set());
       
       setIsLoading(true);
-
-      const startSearch = () => {
-        // 新しい投稿を集約する関数
-        const aggregatePostsFunc = (newResults: any[]) => {
-          setAggregatedPosts(prevPosts => {
-            const updatedPosts = new Set(prevPosts);
-            newResults.forEach(result => {
-              result.posts.forEach((post: TwitterPost) => {
-                // URLとドメイン情報を追加
-                const postWithUrl = {
-                  ...post,
-                  url: `https://x.com/${post.author.username}/status/${post.id}`,
-                  domain: 'x.com'
-                } as TwitterPost & { url: string; domain: string };
-                updatedPosts.add(postWithUrl);
-              });
-            });
-            return updatedPosts;
-          });
-        };
-
-        if (dbSubQueries.length > 0) {
-          // データベースにサブクエリが存在する場合
-          setStatus('processing');
-          const formattedQueries = dbSubQueries.map(q => ({ query: q.query_text }));
-          executeCozeQueries(formattedQueries.map(q => q.query))
-            .then((results) => {
-              setCozeResults(results);
-              aggregatePostsFunc(results);
-              setStatus('generating');
-              setTimeout(() => {
-                setStatus('completed');
-              }, 1000);
-            })
-            .catch((error) => {
-              console.error('Error executing queries:', error);
-            })
-            .finally(() => {
-              setIsLoading(false);
-            });
-        } else {
-          // データベースにサブクエリが存在しない場合は通常のフロー
-          setStatus('understanding');
-          setTimeout(() => {
-            setStatus('thinking');
-            setTimeout(() => {
-              generateSubQueries(searchQuery)
-                .then(async (response) => {
-                  const formattedQueries = response.map(query => ({ query }));
-                  setSubQueries(formattedQueries);
-                  setStatus('processing');
-
-                  // 親クエリのIDを取得
-                  const supabase = createClient();
-                  const { data: { session } } = await supabase.auth.getSession();
-                  const { data: parentQuery } = await supabase
-                    .from('queries')
-                    .select('id')
-                    .eq('query_text', searchQuery)
-                    .eq('query_type', 'user')
-                    .eq('user_id', session?.user?.id)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .single();
-
-                  // サブクエリを保存
-                  if (parentQuery?.id) {
-                    const saveSubQueries = formattedQueries.map(async (q) => {
-                      try {
-                        const { error } = await supabase
-                          .from('queries')
-                          .insert({
-                            user_id: session?.user?.id,
-                            query_text: q.query,
-                            query_type: 'auto',
-                            parent_query_id: parentQuery.id
-                          });
-
-                        if (error) {
-                          console.error('[SearchNewPage] Error saving sub-query:', error);
-                        }
-                      } catch (error) {
-                        console.error('[SearchNewPage] Unexpected error saving sub-query:', error);
-                      }
-                    });
-
-                    await Promise.all(saveSubQueries);
-                  }
-                  
-                  // Execute Coze queries in parallel
-                  return executeCozeQueries(formattedQueries.map(q => q.query));
-                })
-                .then((results) => {
-                  setCozeResults(results);
-                  aggregatePostsFunc(results);
-                  setStatus('generating');
-                  setTimeout(() => {
-                    setStatus('completed');
-                  }, 1000);
-                })
-                .catch((error) => {
-                  console.error('Error generating sub-queries:', error);
-                  setSubQueries([]);
-                })
-                .finally(() => {
-                  setIsLoading(false);
-                });
-            }, 1000);
-          }, 1000);
-        }
-      };
-
-      // 検索を開始
-      startSearch();
     }
   }, [searchParams]);
 
@@ -260,13 +217,6 @@ export default function SearchNewPage() {
     }
   }, [cozeResults]);
 
-  useEffect(() => {
-    if (searchParams.get('q')) {
-      setTotalPosts(0);
-      setProcessedResults(new Set());
-    }
-  }, [searchParams]);
-
   const updateLanguageCount = (queries: Array<{ query: string }>) => {
     const languages = new Set<string>();
     queries.forEach(queryItem => {
@@ -290,6 +240,133 @@ export default function SearchNewPage() {
 
   const getCurrentStepIndex = () => {
     return statusSteps.findIndex(step => step.key === status);
+  };
+
+  const aggregatePostsFunc = (newResults: any[]) => {
+    setAggregatedPosts(prevPosts => {
+      const updatedPosts = new Set(prevPosts);
+      newResults.forEach(result => {
+        result.posts.forEach((post: TwitterPost) => {
+          // URLとドメイン情報を追加
+          const postWithUrl = {
+            ...post,
+            url: `https://x.com/${post.author.username}/status/${post.id}`,
+            domain: 'x.com'
+          } as TwitterPost & { url: string; domain: string };
+          updatedPosts.add(postWithUrl);
+        });
+      });
+      return updatedPosts;
+    });
+  };
+
+  const generateNewSubQueries = async (searchQuery: string, userId: string | undefined, parentId: string) => {
+    setStatus('understanding');
+    setTimeout(() => {
+      setStatus('thinking');
+      setTimeout(() => {
+        generateSubQueries(searchQuery)
+          .then(async (response) => {
+            const formattedQueries = response.map(query => ({ query }));
+            setSubQueries(formattedQueries);
+            setStatus('processing');
+
+            // サブクエリを保存
+            const supabase = createClient();
+            const saveSubQueries = formattedQueries.map(async (q) => {
+              try {
+                const { error } = await supabase
+                  .from('queries')
+                  .insert({
+                    user_id: userId,
+                    query_text: q.query,
+                    query_type: 'auto',
+                    parent_query_id: parentId
+                  });
+
+                if (error) {
+                  console.error('Error saving sub query:', error);
+                  return;
+                }
+              } catch (error) {
+                console.error('Error in saveSubQueries:', error);
+              }
+            });
+
+            await Promise.all(saveSubQueries);
+
+            // Cozeクエリを実行
+            executeCozeQueries(formattedQueries.map(q => q.query), userId, parentId)
+              .then(async (results) => {
+                setCozeResults(results);
+                
+                // ランク付けを実行
+                try {
+                  await updateRankingsForParentQuery(parentId, supabase);
+                } catch (error) {
+                  console.error('Error updating rankings:', error);
+                }
+
+                setStatus('completed');
+              })
+              .catch((error) => {
+                console.error('Error executing Coze queries:', error);
+                setStatus('completed');
+              });
+          })
+          .catch((error) => {
+            console.error('Error generating sub queries:', error);
+            setStatus('completed');
+          });
+      }, 1000);
+    }, 1000);
+  };
+
+  const createNewParentQuery = async (searchQuery: string, userId: string | undefined) => {
+    setQuery(searchQuery);
+    const supabase = createClient();
+    
+    try {
+      // 親クエリを作成
+      const { data: newParentQuery, error: parentError } = await supabase
+        .from('queries')
+        .insert({
+          user_id: userId,
+          query_text: searchQuery,
+          query_type: 'user',
+        })
+        .select()
+        .single();
+
+      if (parentError) {
+        console.error('Error creating parent query:', parentError);
+        return;
+      }
+
+      if (newParentQuery) {
+        setParentQueryData(newParentQuery);
+
+        // ユーザーの最初のクエリをfetched_dataテーブルに保存
+        await storeDataWithEmbedding(
+          searchQuery,
+          [{
+            sourceTitle: 'User Query',
+            sourceUrl: '', // ユーザークエリなのでURLは空
+            content: searchQuery,
+            metadata: {
+              type: 'user_query',
+              timestamp: new Date().toISOString(),
+            }
+          }],
+          userId
+        );
+
+        // 新しいサブクエリを生成
+        generateNewSubQueries(searchQuery, userId, newParentQuery.id);
+      }
+    } catch (error) {
+      console.error('Unexpected error creating parent query:', error);
+    }
   };
 
   return (

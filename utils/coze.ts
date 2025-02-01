@@ -1,9 +1,9 @@
 const WORKFLOW_ID = '7462445424055746578';
 const API_URL = 'https://api.coze.com/v1/workflow/stream_run';
-const BATCH_SIZE = 3; // Process 3 queries at a time
-const RETRY_DELAY = 10000; // 10 seconds delay between retries
-const MAX_RETRIES = 3; // Maximum number of retry attempts
-const BATCH_DELAY = 15000; // 15 seconds delay between batches
+const BATCH_SIZE = 10;        // 5→10に増やしてさらに処理効率を向上
+const RETRY_DELAY = 3000;    // 5秒→3秒にさらに短縮
+const MAX_RETRIES = 2;       // 2回のまま維持
+const BATCH_DELAY = 5000;    // 8秒→5秒にさらに短縮
 
 // レート制限とクォータ制限の管理のための定数
 const RATE_LIMIT = {
@@ -216,7 +216,12 @@ function parseStreamContent(content: string): any {
   }
 }
 
-async function processStreamResponse(response: Response, query: string): Promise<FormattedResponse> {
+async function processStreamResponse(
+  response: Response,
+  query: string,
+  userId?: string,
+  parentQueryId?: string
+): Promise<FormattedResponse> {
   const startTime = Date.now();
   console.log('\n=== Starting processStreamResponse ===');
   console.log('Query:', query);
@@ -297,6 +302,31 @@ async function processStreamResponse(response: Response, query: string): Promise
     console.log('Total posts:', allPosts.length);
     console.log('Processing time:', formattedResponse.metadata.processing_time, 'ms');
 
+    // 結果をDBに保存（Embedding付き）
+    if (allPosts.length > 0) {
+      await storeDataWithEmbedding(
+        query,
+        allPosts.map(post => ({
+          sourceTitle: `Twitter Post by ${post.author.username}`,
+          sourceUrl: `https://twitter.com/${post.author.username}/status/${post.id}`,
+          content: post.text,
+          metadata: {
+            author: post.author,
+            metrics: post.metrics,
+            created_at: post.created_at,
+            urls: post.urls,
+            media: post.media,
+            referenced_tweets: post.referenced_tweets,
+            language: post.language,
+          },
+        })),
+        userId,
+        parentQueryId
+      );
+    } else {
+      console.log('No posts to save, skipping embedding generation and storage');
+    }
+
     return formattedResponse;
   } catch (error) {
     console.error('Error in processStreamResponse:', error);
@@ -304,14 +334,320 @@ async function processStreamResponse(response: Response, query: string): Promise
   }
 }
 
-// Coze API output item interface
-interface CozeOutputItem {
-  freeBusy?: {
-    post: any | any[];  // Can be single post or array of posts
-  };
+// ============== Cohere多言語Embeddingの設定 =============
+// Supabase設定
+import { createClient } from './supabase/client'
+const supabase = createClient();
+
+// Cohere API設定
+const COHERE_API_URL = 'https://api.cohere.com/v2/embed';
+const COHERE_API_KEY = process.env.NEXT_PUBLIC_CO_API_KEY;
+
+/**
+ * Cohere API（embed-multilingual-v3.0）を使って
+ * テキストのEmbedding(1024次元)を一括で取得するヘルパー関数
+ */
+async function getEmbeddings(texts: string[]): Promise<number[][]> {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 1000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (!COHERE_API_KEY) {
+        throw new Error('COHERE_API_KEY is not set');
+      }
+
+      const truncatedTexts = texts.map(text => text.slice(0, 8000));
+      
+      const requestBody = {
+        texts: truncatedTexts,
+        model: 'embed-multilingual-v3.0',
+        input_type: 'search_document',
+        embedding_types: ['float']
+      };
+
+      const response = await fetch(COHERE_API_URL, {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          'authorization': `Bearer ${COHERE_API_KEY}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} - ${JSON.stringify(responseData)}`);
+      }
+
+      return responseData.embeddings.float;
+    } catch (error) {
+      if (attempt < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        continue;
+      }
+      throw error;
+    }
+  }
+  
+  throw new Error('Failed to get embeddings after all retries');
 }
 
-export async function executeCozeQueries(subQueries: string[]): Promise<FormattedResponse[]> {
+async function getCurrentQueryId(searchQuery: string, userId: string): Promise<string | null> {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const { data: queryData, error } = await supabase
+      .from('queries')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('query_text', searchQuery)
+      .gte('created_at', today.toISOString())
+      .lt('created_at', tomorrow.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('クエリ検索エラー:', error);
+      return null;
+    }
+    return queryData?.[0]?.id || null;
+  } catch (error) {
+    console.error('getCurrentQueryIdでエラー:', error);
+    return null;
+  }
+}
+
+// コサイン類似度を計算する関数をエクスポート
+export function calculateCosineSimilarity(vec1: number[], vec2: number[]): number {
+  const dotProduct = vec1.reduce((acc, val, i) => acc + val * vec2[i], 0);
+  const norm1 = Math.sqrt(vec1.reduce((acc, val) => acc + val * val, 0));
+  const norm2 = Math.sqrt(vec2.reduce((acc, val) => acc + val * val, 0));
+  return dotProduct / (norm1 * norm2);
+}
+
+// データをランク付けする関数をエクスポート
+export function rankByEmbeddingSimilarity(userQueryEmbedding: number[], dataEmbeddings: number[][]): number[] {
+  // 各データとユーザークエリとの類似度を計算
+  const similarities = dataEmbeddings.map(embedding => 
+    calculateCosineSimilarity(userQueryEmbedding, embedding)
+  );
+
+  // 類似度に基づいてインデックスをソート
+  const indexesWithSimilarities = similarities.map((sim, index) => ({ sim, index }));
+  indexesWithSimilarities.sort((a, b) => b.sim - a.sim); // 降順ソート
+
+  // ランクを割り当て（1から始まる）
+  const ranks = new Array(similarities.length).fill(0);
+  indexesWithSimilarities.forEach(({ index }, rank) => {
+    ranks[index] = rank + 1;
+  });
+
+  return ranks;
+}
+
+// 特定の親クエリに紐づくデータのランクを更新する関数を追加
+export async function updateRankingsForParentQuery(
+  parentQueryId: string,
+  supabase: any
+): Promise<void> {
+  try {
+    // 1. 親クエリのデータを取得
+    const { data: parentQuery, error: parentQueryError } = await supabase
+      .from('queries')
+      .select('query_text, fetched_data_ids')
+      .eq('id', parentQueryId)
+      .single();
+
+    if (parentQueryError) throw parentQueryError;
+    if (!parentQuery?.fetched_data_ids?.length) return;
+
+    // 2. 親クエリのテキストのEmbeddingを取得
+    const parentQueryEmbedding = await getEmbeddings([parentQuery.query_text]);
+    if (!parentQueryEmbedding?.[0]) {
+      console.error('Failed to get embedding for parent query');
+      return;
+    }
+
+    // 3. 紐づく全てのfetched_dataを取得
+    const { data: fetchedData, error: fetchedDataError } = await supabase
+      .from('fetched_data')
+      .select('id, embedding')
+      .in('id', parentQuery.fetched_data_ids);
+
+    if (fetchedDataError) throw fetchedDataError;
+    if (!fetchedData?.length) return;
+
+    // 4. 類似度に基づいてランク付け
+    const embeddings = fetchedData.map((d: { embedding: string | number[] }) => {
+      // If embedding is stored as a string, parse it
+      return typeof d.embedding === 'string' ? JSON.parse(d.embedding) : d.embedding;
+    });
+    const ranks = rankByEmbeddingSimilarity(parentQueryEmbedding[0], embeddings);
+
+    // 5. ランクを更新
+    const updates = fetchedData.map((data: { id: string, embedding: string | number[] }, index: number) => ({
+      id: data.id,
+      rank: ranks[index]
+    }));
+
+    // 一括更新
+    const { error: updateError } = await supabase
+      .from('fetched_data')
+      .upsert(updates);
+
+    if (updateError) throw updateError;
+
+    console.log('Rankings updated successfully for parent query:', parentQueryId);
+  } catch (error) {
+    console.error('Error updating rankings:', error);
+    throw error;
+  }
+}
+
+/**
+ * fetched_dataテーブルに、Embedding付きで複数の投稿を一括保存する関数。
+ * CohereのgetEmbeddings()で Embeddingを一括取得して保存します。
+ */
+export async function storeDataWithEmbedding(
+  searchQuery: string,
+  items: Array<{
+    sourceTitle: string;
+    sourceUrl: string;
+    content: string;
+    metadata: any;
+  }>,
+  userId?: string,
+  queryId?: string
+): Promise<void> {
+  try {
+    let actualUserId = userId;
+    if (!actualUserId) {
+      try {
+        const { data: { user }, error: sessionError } = await supabase.auth.getUser();
+        if (sessionError) throw sessionError;
+        if (!user?.id) throw new Error('ユーザーがログインしていません');
+        actualUserId = user.id;
+      } catch (error: unknown) {
+        const err = error as Error;
+        console.error('セッション取得エラー:', {
+          name: err.name,
+          message: err.message,
+          stack: err.stack,
+          error: JSON.stringify(err, Object.getOwnPropertyNames(err))
+        });
+        throw new Error(`セッション取得に失敗しました: ${err.message}`);
+      }
+    }
+
+    // queryIdが渡されていない場合のみgetCurrentQueryIdを使用
+    const actualQueryId = queryId || await getCurrentQueryId(searchQuery, actualUserId);
+    if (!actualQueryId) {
+      throw new Error(`対応するクエリが見つかりませんでした。Query: ${searchQuery}, UserId: ${actualUserId}`);
+    }
+
+    // 全てのコンテンツのembeddingを一括取得
+    const contents = items.map(item => item.content);
+    const embeddings = await getEmbeddings(contents);
+
+    console.log('Saving embeddings in batch:', {
+      queryId: actualQueryId,
+      itemCount: items.length,
+      embeddingLengths: embeddings.map(emb => emb.length)
+    });
+
+    // 各embeddingの検証
+    embeddings.forEach((embedding, index) => {
+      if (!embedding || embedding.length !== 1024) {
+        throw new Error(`Invalid embedding at index ${index}: expected 1024 dimensions, got ${embedding?.length}`);
+      }
+    });
+
+    // ユーザークエリのembeddingを取得（items[0]がユーザークエリの場合）
+    const userQueryEmbedding = embeddings[0];
+    
+    // ランクを計算
+    const ranks = rankByEmbeddingSimilarity(userQueryEmbedding, embeddings);
+
+    // データを一括で保存するための準備
+    const now = new Date().toISOString();
+    const dataToInsert = items.map((item, index) => ({
+      id: crypto.randomUUID(),  // UUIDを生成
+      content: item.content,
+      source_title: item.sourceTitle,
+      source_url: item.sourceUrl,
+      metadata: item.metadata,
+      embedding: embeddings[index],
+      created_at: now,
+      updated_at: now,
+      query_id: actualQueryId
+    }));
+
+    const { error: insertError } = await supabase
+      .from('fetched_data')
+      .insert(dataToInsert);
+
+    if (insertError) {
+      console.error('データの保存エラー:', insertError);
+      throw new Error(`データの保存に失敗しました: ${insertError.message}`);
+    }
+
+    // クエリを更新してfetched_data_idsを設定
+    const { data: currentQuery, error: queryError } = await supabase
+      .from('queries')
+      .select('*')
+      .eq('id', actualQueryId)
+      .single();
+
+    if (queryError) {
+      console.error('クエリの取得エラー:', queryError);
+      throw new Error(`クエリの取得に失敗しました: ${queryError.message}`);
+    }
+
+    const existingIds = currentQuery?.fetched_data_ids || [];
+    const newFetchedDataIds = dataToInsert.map(item => item.id);
+
+    // クエリを更新
+    const { error: updateError } = await supabase
+      .from('queries')
+      .update({
+        fetched_data_ids: [...existingIds, ...newFetchedDataIds],
+        updated_at: now
+      })
+      .eq('id', actualQueryId);
+
+    if (updateError) {
+      console.error('クエリの更新エラー:', updateError);
+      throw new Error(`クエリの更新に失敗しました: ${updateError.message}`);
+    }
+
+    console.log('保存されたデータ:', {
+      savedCount: dataToInsert.length,
+      queryId: actualQueryId,
+      newFetchedDataIds
+    });
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('データ保存エラー:', {
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      error: JSON.stringify(err, Object.getOwnPropertyNames(err))
+    });
+    throw err;
+  }
+}
+
+export async function executeCozeQueries(
+  subQueries: string[],
+  userId?: string,
+  parentQueryId?: string
+): Promise<FormattedResponse[]> {
   const results: FormattedResponse[] = [];
   
   // Split queries into batches
@@ -366,15 +702,16 @@ export async function executeCozeQueries(subQueries: string[]): Promise<Formatte
             throw new Error(`API error: ${response.statusText}`);
           }
 
-          return await processStreamResponse(response, query);
+          return await processStreamResponse(response, query, userId, parentQueryId);
         } catch (error) {
-          console.error(`Error processing query (attempt ${retries + 1}/${MAX_RETRIES}):`, error);
+          const err = error as Error;
+          console.error(`Error processing query (attempt ${retries + 1}/${MAX_RETRIES}):`, err);
           if (retries === MAX_RETRIES - 1) {
             return {
               query,
               posts: [],
               metadata: { total_count: 0, processing_time: 0 },
-              error: error instanceof Error ? error.message : String(error)
+              error: err.message
             };
           }
           await sleep(RETRY_DELAY);
