@@ -551,33 +551,23 @@ export async function storeDataWithEmbedding(
       throw new Error(`対応するクエリが見つかりませんでした。Query: ${searchQuery}, UserId: ${actualUserId}`);
     }
 
-    // 全てのコンテンツのembeddingを一括取得
+    // 検索クエリとコンテンツのembeddingを一括で取得
     const contents = items.map(item => item.content);
-    const embeddings = await getEmbeddings(contents);
-
-    console.log('Saving embeddings in batch:', {
-      queryId: actualQueryId,
-      itemCount: items.length,
-      embeddingLengths: embeddings.map(emb => emb.length)
-    });
-
-    // 各embeddingの検証
-    embeddings.forEach((embedding, index) => {
-      if (!embedding || embedding.length !== 1024) {
-        throw new Error(`Invalid embedding at index ${index}: expected 1024 dimensions, got ${embedding?.length}`);
-      }
-    });
-
-    // ユーザークエリのembeddingを取得（items[0]がユーザークエリの場合）
-    const userQueryEmbedding = embeddings[0];
+    const allTexts = [searchQuery, ...contents];
+    const allEmbeddings = await getEmbeddings(allTexts);
     
-    // ランクを計算
-    const ranks = rankByEmbeddingSimilarity(userQueryEmbedding, embeddings);
+    // クエリのembeddingと残りのembeddingを分離
+    const [queryEmbedding, ...embeddings] = allEmbeddings;
 
-    // データを一括で保存するための準備
+    // コサイン類似度を計算
+    const similarities = embeddings.map(embedding => 
+      calculateCosineSimilarity(queryEmbedding, embedding)
+    );
+
+    // データを一括保存
     const now = new Date().toISOString();
     const dataToInsert = items.map((item, index) => ({
-      id: crypto.randomUUID(),  // UUIDを生成
+      id: crypto.randomUUID(),
       content: item.content,
       source_title: item.sourceTitle,
       source_url: item.sourceUrl,
@@ -585,7 +575,8 @@ export async function storeDataWithEmbedding(
       embedding: embeddings[index],
       created_at: now,
       updated_at: now,
-      query_id: actualQueryId
+      query_id: actualQueryId,
+      similarity_score: similarities[index]  // コサイン類似度を保存
     }));
 
     const { error: insertError } = await supabase
