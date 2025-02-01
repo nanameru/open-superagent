@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { generateSubQueries } from '@/utils/meta-llama-3-70b-instruct-turbo';
-import { executeCozeQueries, updateRankingsForParentQuery, storeDataWithEmbedding } from '@/utils/coze';
+import { executeCozeQueries, rerankSimilarDocuments, storeDataWithEmbedding } from '@/utils/coze';
 import { TwitterPost } from '@/utils/coze';
 import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
@@ -302,9 +302,9 @@ export default function SearchNewPage() {
                 
                 // ランク付けを実行
                 try {
-                  await updateRankingsForParentQuery(parentId, supabase);
+                  await rerankSimilarDocuments(parentId);
                 } catch (error) {
-                  console.error('Error updating rankings:', error);
+                  console.error('Error reranking documents:', error);
                 }
 
                 setStatus('completed');

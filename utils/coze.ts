@@ -731,3 +731,198 @@ export async function executeCozeQueries(
 
   return results;
 }
+
+const RERANK_BATCH_SIZE = 100; // Cohereのrerank APIの制限に応じて調整
+
+// ragsテーブルのレコードの型定義
+type Rag = {
+  id: string;
+  query_id: string;
+  fetched_data_id: string;
+  score: number;
+  rank: number;
+  selected_as_source: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+// Cohereのrerankを実行する関数
+export async function rerankSimilarDocuments(parentQueryId: string): Promise<void> {
+  try {
+    // 環境変数のチェック
+    if (!process.env.NEXT_PUBLIC_CO_API_KEY) {
+      console.error('NEXT_PUBLIC_CO_API_KEY is not defined');
+      return;
+    }
+
+    const supabase = createClient();
+
+    // 親クエリテキストを取得
+    const { data: queryData, error: queryError } = await supabase
+      .from('queries')
+      .select('query_text')
+      .eq('id', parentQueryId)
+      .single();
+
+    if (queryError) {
+      console.error('Error fetching parent query:', queryError);
+      return;
+    }
+    if (!queryData?.query_text) {
+      console.error(`Parent query not found or invalid: ${parentQueryId}`);
+      return;
+    }
+
+    // similarity_score >= 0.5のデータを取得
+    const { data: documents, error: docsError } = await supabase
+      .from('fetched_data')
+      .select('*')
+      .eq('query_id', parentQueryId)
+      .gte('similarity_score', 0.5)
+      .order('similarity_score', { ascending: false });
+
+    if (docsError) {
+      console.error('Error fetching documents:', docsError);
+      return;
+    }
+    if (!documents || documents.length === 0) {
+      console.log(`No documents found with similarity score >= 0.5 for parent query ${parentQueryId}`);
+      return;
+    }
+
+    // 各ドキュメントのコンテンツをチェック
+    const validDocuments = documents.filter(doc => {
+      if (!doc?.content || typeof doc.content !== 'string') {
+        console.log(`Skipping document ${doc?.id} due to invalid content`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validDocuments.length === 0) {
+      console.log('No valid documents found after content validation');
+      return;
+    }
+
+    console.log(`Reranking ${validDocuments.length} documents for query: ${queryData.query_text}`);
+
+    // ドキュメントをバッチに分割
+    const batches = validDocuments.length > RERANK_BATCH_SIZE
+      ? Array.from({ length: Math.ceil(validDocuments.length / RERANK_BATCH_SIZE) }, (_, i) =>
+          validDocuments.slice(i * RERANK_BATCH_SIZE, (i + 1) * RERANK_BATCH_SIZE)
+        )
+      : [validDocuments];
+
+    // 全バッチの結果を一時的に保持
+    let tempResults: Rag[] = [];
+    
+    for (const [batchIndex, batch] of batches.entries()) {
+      // レート制限をチェック
+      if (!checkRateLimit()) {
+        console.log('Rate limit reached, waiting before rerank...');
+        await sleep(RETRY_DELAY);
+        if (!checkRateLimit()) {
+          console.log('Rate limit still exceeded after retry, skipping batch');
+          continue;
+        }
+      }
+
+      console.log(`Processing batch ${batchIndex + 1}/${batches.length}`);
+
+      try {
+        // Cohereのrerank APIを呼び出し
+        const response = await fetch('https://api.cohere.com/v2/rerank', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_CO_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'rerank-multilingual-v3.0',
+            query: queryData.query_text,
+            documents: batch.map(doc => doc.content),
+            top_n: batch.length
+          })
+        });
+
+        if (!response.ok) {
+          console.error(`Rerank API error: ${response.statusText}`);
+          continue;
+        }
+
+        const rerankResult = await response.json();
+        
+        // レスポンスの形式を検証
+        if (!rerankResult?.results || !Array.isArray(rerankResult.results)) {
+          console.error('Invalid rerank API response format');
+          continue;
+        }
+
+        // バッチの結果を一時配列に追加
+        const batchResults = rerankResult.results
+          .map((result: { index: number; relevance_score: number }) => {
+            // インデックスの範囲チェック
+            if (!result || result.index < 0 || result.index >= batch.length) {
+              console.log(`Skipping invalid result at index ${result.index}`);
+              return null;
+            }
+            
+            // スコアの型チェック
+            if (typeof result.relevance_score !== 'number') {
+              console.log(`Skipping result with invalid relevance_score`);
+              return null;
+            }
+
+            return {
+              id: crypto.randomUUID(),
+              query_id: parentQueryId,
+              fetched_data_id: batch[result.index].id,
+              score: result.relevance_score,
+              rank: 0, // 一時的な値
+              selected_as_source: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            };
+          })
+          .filter((update: Rag | null): update is Rag => update !== null);
+
+        tempResults = [...tempResults, ...batchResults];
+
+        // バッチ間で少し待機
+        if (batches.length > 1 && batchIndex < batches.length - 1) {
+          await sleep(1000);
+        }
+      } catch (error) {
+        console.log(`Skipping batch ${batchIndex + 1} due to error:`, error);
+        continue;
+      }
+    }
+
+    if (tempResults.length === 0) {
+      console.log('No valid updates generated after processing all batches');
+      return;
+    }
+
+    // 全ての結果をスコアで降順ソートして順位を付ける（1から開始）
+    const allUpdates = tempResults
+      .sort((a, b) => b.score - a.score)
+      .map((rag, index) => ({
+        ...rag,
+        rank: index + 1 // 1からの順位を割り当て
+      }));
+
+    // ragsテーブルに結果を保存
+    const { error: insertError } = await supabase
+      .from('rags')
+      .insert(allUpdates);
+
+    if (insertError) {
+      console.error('Error inserting to rags table:', insertError);
+      return;
+    }
+
+    console.log(`Successfully saved ${allUpdates.length} rerank results to rags table`);
+  } catch (error) {
+    console.log('Error in rerankSimilarDocuments:', error);
+  }
+}
