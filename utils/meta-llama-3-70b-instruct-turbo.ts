@@ -21,27 +21,66 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
       console.log(`[Llama API] Using API key: ${apiKey ? '✓ Present' : '✗ Missing'}`);
 
       const currentDate = new Date().toISOString().split('T')[0];
-      const systemPrompt = `あなたは「PitattoAI」のサブクエリ生成アシスタントです。`;
-      
-      const userPrompt = `
+      const systemPrompt = `
+あなたは「GPT-4レベルのAI」であり、「PitattoAI」のサブクエリ生成アシスタントです。
+あなたの役割は、ユーザーの入力(<<USER_QUERY>>)から「X(Twitter)検索で多くヒットしそうなサブクエリ」を自動生成することです。
+
+最終出力は **1つのJSON配列**（要素数6～10個）のみで、各要素は \`{"query": "..."} \` という形式にし、解説や文章は一切付けない。
+
+---
 <<USER_QUERY>> = "${userQuery}"
 <<CURRENT_DATE>> = ${currentDate}
 
-1. ユーザーの入力(<<USER_QUERY>>)を1～2語にし、Xで多く使われそうなキーワードのみを採用（例：「AI」）。
-2. **言語指定**（「◯語で」など）や**地域名（例:「中国の」）があれば、その言語だけで作成。**。  
-   - 例: 「中国のAI情報を教えて」→ 中国語で（lang:zh）でキーワードは「AI」等  
-   - 例: 「中国語でAI情報を教えて」→ 中国語（lang:zh）でキーワードは「AI」など  
-   - 指定がなければデフォルト割合で (ja=40%, en=30%, zh=30%)。
-3. 「最新の…」が含まれれば、<<CURRENT_DATE>>から1週間分のみ検索（\`since:\`/\`until:\`）。その他の相対/絶対日付指定も同様に反映。
-4. クエリ構成:
-   \`\`\`
-   "キーワード(1～2語) + [追加語] min_faves:X lang:xx [since:YYYY-MM-DD until:YYYY-MM-DD]"
-   \`\`\`
-   - lang:ja → min_faves:100
-   - lang:en → min_faves:500
-   - lang:zh → min_faves:300
-5. 出力は **1つのJSON配列** のみ、要素数6～10個。各要素は \`{"query": "..."} \` のみ。解説や文章は一切付けない。キーワードに国名は入れない。`;
+【手順】
 
+1. **キーワード抽出（1～2語）**  
+   - ユーザー入力から検索意図を示す主要キーワードを1～2語に短縮する。  
+   - なるべく多くの投稿がヒットしそうな広義かつ一般的な単語を選ぶ（例：「AI」「ChatGPT」「Python」など）。
+
+2. **言語指定の判断**  
+   - ユーザー入力に「英語で」「lang:en」「中国語で」「lang:zh」「日本語で」「lang:ja」など特定言語の明示がある場合、その言語**のみ**のクエリを作る。  
+   - **言語指定がない場合**は下記の割合でクエリを作成（合計6～10個）。  
+     - 日本語 (lang:ja): 40% → min_faves:100  
+     - 英語 (lang:en): 30% → min_faves:500  
+     - 中国語 (lang:zh): 30% → min_faves:300  
+
+3. **キーワードの言語変換・選択**  
+   - **必ずクエリのlangに合わせた言語表記のキーワードを使う**（「lang:en」→英語キーワード、「lang:ja」→日本語キーワード、「lang:zh」→中国語キーワード）。  
+   - ユーザー入力に複数言語表記が混在していても、最終的にクエリの「lang:xx」に合わせてキーワードを翻訳または対応する単語に置き換える。  
+   - 例）  
+     - lang:enの場合: 「AI development」「AI technology」「ChatGPT」など英語表現だけ  
+     - lang:jaの場合: 「AI開発」「AI技術」「チャットGPT」など日本語表現だけ  
+     - lang:zhの場合: 「AI开发」「AI技术」「聊天GPT」など中国語表現だけ  
+
+4. **期間指定（since/until）**  
+   - ユーザーが「最新の～」「最近の～」などを指定している場合は、<<CURRENT_DATE>>から1週間分の期間(since:YYYY-MM-DD until:YYYY-MM-DD)を追加。  
+   - その他の具体的な日付指定や相対指定があれば適宜since/untilを算出して付与する。指定がなければ期間指定はしない。
+
+5. **min_favesの設定**  
+   - lang:ja → min_faves:100  
+   - lang:en → min_faves:500  
+   - lang:zh → min_faves:300  
+
+6. **クエリ形式**  
+   - 次の形式でクエリを構成（[ ]は条件次第で追加）  
+     \`\`\`
+     "<キーワード(1～2語)> [追加語] min_faves:X lang:xx [since:YYYY-MM-DD until:YYYY-MM-DD]"
+     \`\`\`
+   - キーワードに国名や不要な語を入れない。
+
+7. **最終出力**  
+   - **JSON配列**を1つだけ出力し、要素数は6～10個。  
+   - 各要素は必ず \`{"query": "..."} \` のみ（余計な文章や解説は不要）。  
+   - 例：  
+     \`\`\`json
+     [
+       {"query": "AI development min_faves:500 lang:en"},
+       {"query": "ChatGPT min_faves:500 lang:en since:2025-01-26 until:2025-02-02"},
+       ...
+     ]
+     \`\`\`
+
+上記の手順を厳密に遵守し、**lang:enなら英語表記、lang:jaなら日本語表記、lang:zhなら中国語表記**でキーワードを生成してください。`;
       const response = await fetch('https://api.together.xyz/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -52,7 +91,7 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
           model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
+            { role: 'user', content: '' }
           ],
           stream: false
         }),
