@@ -350,49 +350,61 @@ const COHERE_API_KEY = process.env.NEXT_PUBLIC_CO_API_KEY;
 async function getEmbeddings(texts: string[]): Promise<number[][]> {
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 1000;
+  const BATCH_SIZE = 96; // Cohereの制限に合わせて96に設定
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      if (!COHERE_API_KEY) {
-        throw new Error('COHERE_API_KEY is not set');
+  // 結果を格納する配列
+  let allEmbeddings: number[][] = [];
+
+  // テキストを96個ずつのバッチに分割
+  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+    const batch = texts.slice(i, i + BATCH_SIZE);
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        if (!COHERE_API_KEY) {
+          throw new Error('COHERE_API_KEY is not set');
+        }
+
+        const truncatedTexts = batch.map(text => text.slice(0, 8000));
+        
+        const requestBody = {
+          texts: truncatedTexts,
+          model: 'embed-multilingual-v3.0',
+          input_type: 'search_document',
+          embedding_types: ['float']
+        };
+
+        const response = await fetch(COHERE_API_URL, {
+          method: 'POST',
+          headers: {
+            'accept': 'application/json',
+            'content-type': 'application/json',
+            'authorization': `Bearer ${COHERE_API_KEY}`
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        const responseData = await response.json();
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status} - ${JSON.stringify(responseData)}`);
+        }
+
+        // バッチの結果を全体の結果に追加
+        allEmbeddings = [...allEmbeddings, ...responseData.embeddings.float];
+        break; // 成功したらリトライループを抜ける
+
+      } catch (error) {
+        if (attempt < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          continue;
+        }
+        throw error;
       }
-
-      const truncatedTexts = texts.map(text => text.slice(0, 8000));
-      
-      const requestBody = {
-        texts: truncatedTexts,
-        model: 'embed-multilingual-v3.0',
-        input_type: 'search_document',
-        embedding_types: ['float']
-      };
-
-      const response = await fetch(COHERE_API_URL, {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'content-type': 'application/json',
-          'authorization': `Bearer ${COHERE_API_KEY}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} - ${JSON.stringify(responseData)}`);
-      }
-
-      return responseData.embeddings.float;
-    } catch (error) {
-      if (attempt < MAX_RETRIES) {
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        continue;
-      }
-      throw error;
     }
   }
   
-  throw new Error('Failed to get embeddings after all retries');
+  return allEmbeddings;
 }
 
 async function getCurrentQueryId(searchQuery: string, userId: string): Promise<string | null> {
@@ -813,7 +825,7 @@ export async function rerankSimilarDocuments(parentQueryId: string): Promise<voi
         )
       : [validDocuments];
 
-    // 全バッチの結果を一時的に保持
+    // 全ての結果を一時的に保持
     let tempResults: Rag[] = [];
     
     for (const [batchIndex, batch] of batches.entries()) {
