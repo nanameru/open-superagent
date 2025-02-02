@@ -5,13 +5,13 @@ import { TwitterPost } from '@/utils/coze';
 import { generateDetailedArticle } from '@/utils/meta-llama-3-70b-instruct-turbo-article';
 import { SourceList } from './source-list';
 import { SourcePreview } from './source-preview';
-
-const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+import { createClient } from '@/utils/supabase/client';
 
 interface GeneratedAnswerProps {
   isCompleted?: boolean;
   posts?: Set<TwitterPost>;
   searchQuery: string;
+  parentQueryId: string; 
   onShowSidebar?: () => void;
 }
 
@@ -19,57 +19,82 @@ export default function GeneratedAnswer({
   isCompleted, 
   posts, 
   searchQuery,
+  parentQueryId, 
   onShowSidebar 
 }: GeneratedAnswerProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentPhase, setCurrentPhase] = useState<'planning' | 'writing' | 'refining' | null>(null);
   const [content, setContent] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [selectedSources, setSelectedSources] = useState<any[]>([]);
 
   useEffect(() => {
-    if (isCompleted && posts && posts.size > 0) {
+    if (isCompleted && parentQueryId) {
       setIsGenerating(true);
       setCurrentPhase(null);
       setContent('');
       setError('');
-      
-      const postsArray = Array.from(posts);
-      let postsContent = postsArray.map(post => post.text).join('\n');
-      
-      try {
-        console.log('Starting article generation with query:', searchQuery);
-        console.log('Posts content length:', postsContent.length);
+
+      const fetchSelectedSources = async () => {
+        const supabase = createClient();
         
-        generateDetailedArticle(postsContent, searchQuery)
-          .then((response) => {
-            if (response.error) {
-              console.error('Error in article generation:', response.error);
-              setError(response.error);
-              setContent('');
-            } else {
-              console.log('Article generation completed successfully');
-              setContent(response.content);
-            }
-          })
-          .catch((error) => {
-            console.error('Detailed error in article generation:', error);
-            console.error('Error stack:', error.stack);
-            setError('申し訳ありません。記事の生成中にエラーが発生しました。');
-            setContent('');
-          })
-          .finally(() => {
+        try {
+          const { data: rags, error: ragsError } = await supabase
+            .from('rags')
+            .select(`
+              *,
+              fetched_data (
+                content,
+                source_title,
+                source_url
+              )
+            `)
+            .eq('query_id', parentQueryId)
+            .order('rank', { ascending: true });
+
+          if (ragsError) {
+            throw ragsError;
+          }
+
+          if (!rags || rags.length === 0) {
+            setError('');
             setIsGenerating(false);
-            setCurrentPhase(null);
-          });
-      } catch (error) {
-        console.error('Error in useEffect:', error);
-        setError('申し訳ありません。予期せぬエラーが発生しました。');
-        setContent('');
-        setIsGenerating(false);
-        setCurrentPhase(null);
-      }
+            return;
+          }
+
+          setSelectedSources(rags);
+
+          const sourcesContent = rags
+            .map(rag => rag.fetched_data?.content)
+            .filter(Boolean)
+            .join('\n');
+
+          console.log('Starting article generation with query:', searchQuery);
+          console.log('Selected sources count:', rags.length);
+          
+          const response = await generateDetailedArticle(sourcesContent, searchQuery);
+          
+          if (response.error) {
+            console.error('Error in article generation:', response.error);
+            setError(response.error);
+            setContent('');
+          } else {
+            console.log('Article generation completed successfully');
+            setContent(response.content);
+          }
+        } catch (error) {
+          console.error('Error fetching selected sources:', error);
+          setError('');
+          setContent('');
+        } finally {
+          setIsGenerating(false);
+          setCurrentPhase(null);
+        }
+      };
+
+      fetchSelectedSources();
     }
-  }, [isCompleted, posts, searchQuery]);
+  }, [isCompleted, parentQueryId, searchQuery]);
 
   const getPhaseText = (phase: 'planning' | 'writing' | 'refining' | null) => {
     switch (phase) {
@@ -86,8 +111,6 @@ export default function GeneratedAnswer({
 
   if (!isCompleted) return null;
 
-  const sourceArray = posts ? Array.from(posts).map(post => post.text) : [];
-
   return (
     <div className="flex-1">
       <div className="flex flex-col gap-4">
@@ -96,15 +119,29 @@ export default function GeneratedAnswer({
         )}
         
         <div className="prose prose-sm max-w-none">
-          {sourceArray.length > 0 && (
+          {selectedSources.length > 0 && (
             <div className="mb-8">
               <SourcePreview
-                sources={sourceArray}
+                sources={selectedSources.map(rag => ({
+                  title: rag.fetched_data?.source_title || '',
+                  url: rag.fetched_data?.source_url || '',
+                  content: rag.fetched_data?.content || '',
+                  score: rag.score,
+                  rank: rag.rank
+                }))}
                 onShowAll={onShowSidebar}
               />
             </div>
           )}
-          <div dangerouslySetInnerHTML={{ __html: content }} />
+          
+          {isGenerating ? (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
+              {getPhaseText(currentPhase)}
+            </div>
+          ) : content ? (
+            <div className="whitespace-pre-wrap">{content}</div>
+          ) : null}
         </div>
       </div>
     </div>

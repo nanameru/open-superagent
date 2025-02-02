@@ -40,6 +40,7 @@ export default function SearchNewPage() {
   const [languageCount, setLanguageCount] = useState<number>(0);
   const [parentQueryData, setParentQueryData] = useState<any>(null);
   const [dbSubQueries, setDbSubQueries] = useState<any[]>([]);
+  const [selectedSources, setSelectedSources] = useState<any[]>([]);
 
   useEffect(() => {
     const searchQuery = searchParams.get('q');
@@ -369,6 +370,42 @@ export default function SearchNewPage() {
     }
   };
 
+  // 選定されたソースを取得する関数
+  const fetchSelectedSources = async (queryId: string) => {
+    const supabase = createClient();
+    try {
+      const { data: rags, error: ragsError } = await supabase
+        .from('rags')
+        .select(`
+          *,
+          fetched_data (
+            content,
+            source_title,
+            source_url
+          )
+        `)
+        .eq('query_id', queryId)
+        .order('rank', { ascending: true });
+
+      if (ragsError) {
+        console.error('Error fetching selected sources:', ragsError);
+        return;
+      }
+
+      if (rags) {
+        setSelectedSources(rags);
+      }
+    } catch (error) {
+      console.error('Error in fetchSelectedSources:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (parentQueryData?.id && status === 'completed') {
+      fetchSelectedSources(parentQueryData.id);
+    }
+  }, [parentQueryData?.id, status]);
+
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -554,6 +591,7 @@ export default function SearchNewPage() {
               isCompleted={status === 'completed'} 
               posts={aggregatedPosts}
               searchQuery={query}
+              parentQueryId={parentQueryData?.id}
               onShowSidebar={() => setShowSidebar(true)}
             />
           </div>
@@ -563,14 +601,12 @@ export default function SearchNewPage() {
             <div className="w-[25%] relative">
               <div className="sticky top-8">
                 <SourceSidebar
-                  sources={Array.from(aggregatedPosts).map(post => ({
-                    text: post.text,
-                    url: `https://x.com/${post.author.username}/status/${post.id}`,
-                    domain: 'x.com',
-                    author: {
-                      username: post.author.username,
-                      profile_image_url: post.author.profile_image_url
-                    }
+                  sources={selectedSources.map(rag => ({
+                    title: rag.fetched_data?.source_title || '',
+                    url: rag.fetched_data?.source_url || '',
+                    content: rag.fetched_data?.content || '',
+                    score: rag.score,
+                    rank: rag.rank
                   }))}
                   isVisible={showSidebar}
                   onClose={() => setShowSidebar(false)}

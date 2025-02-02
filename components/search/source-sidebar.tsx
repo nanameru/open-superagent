@@ -86,6 +86,9 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
   const [selectedSources, setSelectedSources] = useState<Set<number>>(new Set());
   const [showUrlList, setShowUrlList] = useState(false);
 
+  // User Queryを除外
+  const filteredSources = sources.filter(source => !source.title.includes('User Query'));
+
   const toggleSource = (index: number, event?: React.MouseEvent<HTMLDivElement>) => {
     event?.stopPropagation();
     const newSelected = new Set(selectedSources);
@@ -113,7 +116,7 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
 
   // 選択されたURLのリストを取得
   const selectedUrls = Array.from(selectedSources)
-    .map(index => sources[index])
+    .map(index => filteredSources[index])
     .filter(source => source?.url)
     .map(source => ({
       url: source.url as string,
@@ -173,7 +176,7 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.3 }}
                       >
-                        {sources.length} sources
+                        {filteredSources.length} sources
                       </motion.p>
                     </div>
                   </div>
@@ -245,99 +248,57 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
               )}
 
               {/* ソース一覧 */}
-              <motion.div 
-                className="flex-1 overflow-y-auto px-6 py-6"
-                variants={itemVariants}
-              >
-                <div className="space-y-4">
-                  {sources.map((source, index) => (
+              <div className="flex-1 overflow-auto">
+                <div className="p-4 space-y-3">
+                  {filteredSources.map((source, index) => {
+                    const title = source.title.replace(/^Twitter Post by /, '');
+                    return (
                     <motion.div
                       key={index}
                       variants={itemVariants}
-                      whileHover={{ 
-                        scale: 1.02,
-                        transition: { type: 'spring', stiffness: 300 }
-                      }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`group relative overflow-hidden rounded-2xl border border-black/5 bg-white p-5 transition-all hover:border-black/20 ${
-                        selectedSources.has(index)
-                          ? 'ring-1 ring-black/90'
-                          : ''
-                      }`}
+                      className={`group p-4 rounded-xl ${
+                        selectedSources.has(index) 
+                          ? 'bg-gray-100 ring-1 ring-gray-300 shadow-sm' 
+                          : 'hover:bg-gray-50/80'
+                      } cursor-pointer transition-all duration-200`}
                       onClick={(e: React.MouseEvent<HTMLDivElement>) => toggleSource(index, e)}
                     >
-                      <div className="mb-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <motion.span 
-                            className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-black/90 px-2 text-xs font-medium text-white"
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                          >
-                            {source.rank}
-                          </motion.span>
-                          <motion.a
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-black/30 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 hover:text-black/60"
-                            onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                              e.stopPropagation();
-                              handleSourceClick(source, e);
-                            }}
-                            whileHover={{ scale: 1.1, rotate: -10 }}
-                            whileTap={{ scale: 0.9 }}
-                          >
-                            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
-                              <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
-                            </svg>
-                          </motion.a>
+                      <div className="flex items-start gap-4">
+                        <div className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-sm transition-colors duration-200 ${
+                          selectedSources.has(index)
+                            ? 'bg-gray-200 text-gray-700 font-medium'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {index + 1}
                         </div>
-                        <AnimatePresence>
-                          {selectedSources.has(index) && (
-                            <motion.div
-                              initial={{ scale: 0, rotate: -180 }}
-                              animate={{ scale: 1, rotate: 0 }}
-                              exit={{ scale: 0, rotate: 180 }}
-                              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                              className="flex h-6 w-6 items-center justify-center rounded-full bg-black/90 text-white shadow-sm"
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <a
+                              href={source.url}
+                              onClick={(e) => handleSourceClick(source, e)}
+                              className="text-gray-900 hover:text-gray-600 break-words font-medium relative group/link inline-flex items-center gap-2"
                             >
-                              <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              <span>{title}</span>
+                              <svg className={`w-3.5 h-3.5 transition-colors duration-200 ${
+                                selectedSources.has(index) ? 'text-gray-600' : 'text-gray-400'
+                              }`} viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                                <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
                               </svg>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                            </a>
+                          </div>
+                          <p className={`text-sm line-clamp-2 leading-relaxed ${
+                            selectedSources.has(index) ? 'text-gray-600' : 'text-gray-500'
+                          }`}>
+                            {source.content}
+                          </p>
+                        </div>
                       </div>
-                      
-                      <motion.h3 
-                        className="mb-2 text-sm font-medium text-black/80 line-clamp-1 group-hover:text-black"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                      >
-                        {source.title}
-                      </motion.h3>
-                      
-                      <motion.p 
-                        className="text-sm leading-relaxed text-black/50 line-clamp-3 group-hover:text-black/70"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                      >
-                        {source.content}
-                      </motion.p>
-
-                      {/* Hover時のグラデーション効果 */}
-                      <motion.div 
-                        className="absolute inset-0 -z-10 bg-gradient-to-br from-black/[0.02] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                        initial={{ opacity: 0 }}
-                        whileHover={{ opacity: 1 }}
-                      />
                     </motion.div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </motion.div>
+              </div>
             </div>
           </motion.div>
         </div>
