@@ -256,18 +256,41 @@ export default function GeneratedAnswer({
                       <CopyButton text={content} />
                     </div>
                   </div>
-                  <ReactMarkdown>{content}</ReactMarkdown>
-                  {urlMap.size > 0 && (
-                    <div className="mt-4">
-                      {Array.from(urlMap.entries()).map(([index, url]) => (
-                        <CitationButton
-                          key={`citation-${index}`}
-                          index={index}
-                          url={url}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => {
+                        const text = children?.toString() || '';
+                        // 数字のリストのパターンを検出して除外
+                        if (/^\d+(\s+\d+)*$/.test(text.trim())) {
+                          return null;
+                        }
+                        // 引用番号のパターン（[数字]）を検出
+                        const parts = text.split(/(\[\d+\])/g);
+                        return (
+                          <p>
+                            {parts.map((part, index) => {
+                              const match = part.match(/\[(\d+)\]/);
+                              if (match) {
+                                const citationNumber = parseInt(match[1]);
+                                const url = urlMap.get(citationNumber);
+                                return url ? (
+                                  <CitationButton
+                                    key={`inline-citation-${index}`}
+                                    index={citationNumber}
+                                    url={url}
+                                    inline={true}
+                                  />
+                                ) : part;
+                              }
+                              return part;
+                            })}
+                          </p>
+                        );
+                      }
+                    }}
+                  >
+                    {content}
+                  </ReactMarkdown>
                 </div>
               )}
             </div>

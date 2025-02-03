@@ -1,11 +1,9 @@
-import { Home, Compass, FolderOpen, BookOpen } from 'lucide-react'
+import { Home, BookOpen } from 'lucide-react'
 import NavLink from './nav-link'
 
 const navItems = [
-  { href: '/', icon: Home, label: 'Home' },
-  { href: '/discover', icon: Compass, label: 'Discover' },
-  { href: '/spaces', icon: FolderOpen, label: 'Spaces' },
-  { href: '/library', icon: BookOpen, label: 'Library' },
+  { href: '/', icon: Home, label: 'ホーム' },
+  { href: '/library', icon: BookOpen, label: '検索履歴' },
 ]
 
 export default function Navigation() {
