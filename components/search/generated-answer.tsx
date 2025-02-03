@@ -39,10 +39,21 @@ export default function GeneratedAnswer({
       setContent('');
       setError('');
 
-      const fetchSelectedSources = async () => {
+      const fetchData = async () => {
         const supabase = createClient();
+        let filteredContents: { content: string; url: string }[] = [];
         
         try {
+          // まず、保存された要約があるか確認
+          console.log('Checking for existing summary...');
+          const { data: summaries, error: summaryError } = await supabase
+            .from('summaries')
+            .select('summary_text')
+            .eq('query_id', parentQueryId)
+            .limit(1);
+
+          // ソースを取得
+          console.log('Fetching sources...');
           const { data: rags, error: ragsError } = await supabase
             .from('rags')
             .select(`
@@ -60,31 +71,55 @@ export default function GeneratedAnswer({
             throw ragsError;
           }
 
-          if (!rags || rags.length === 0) {
-            setError('');
+          if (rags && rags.length > 0) {
+            setSelectedSources(rags);
+
+            // User Queryを除外し、contentを抽出
+            filteredContents = rags
+              .map(rag => rag.fetched_data)
+              .filter(data => data && data.source_title !== "User Query")
+              .map(data => ({
+                content: data?.content,
+                url: data?.source_url
+              }))
+              .filter(item => item.content && item.url);
+
+            // URLマップを作成（インデックスとURLの対応）
+            const newUrlMap = new Map(
+              filteredContents.map((item, index) => [index + 1, item.url])
+            );
+            setUrlMap(newUrlMap);
+          }
+
+          // 既存の要約があれば表示
+          if (summaryError) {
+            console.error('Error fetching summary:', summaryError);
+          } else if (summaries && summaries.length > 0) {
+            console.log('Found existing summary');
+            setContent(summaries[0].summary_text);
             setIsGenerating(false);
             return;
           }
 
-          setSelectedSources(rags);
+          // 保存された要約がない場合は、新しく生成
+          console.log('No existing summary found, checking sources...');
+          
+          if (!rags || rags.length === 0) {
+            console.log('No sources found, cannot generate summary');
+            setError('ソースが見つかりませんでした');
+            setIsGenerating(false);
+            return;
+          }
 
-          // User Queryを除外し、contentを抽出
-          const filteredContents = rags
-            .map(rag => rag.fetched_data)
-            .filter(data => data && data.source_title !== "User Query")
-            .map(data => ({
-              content: data?.content,
-              url: data?.source_url
-            }))
-            .filter(item => item.content && item.url);
+          if (filteredContents.length === 0) {
+            console.log('No valid sources found after filtering');
+            setError('有効なソースが見つかりませんでした');
+            setIsGenerating(false);
+            return;
+          }
 
-          // URLマップを作成（インデックスとURLの対応）
-          const newUrlMap = new Map(
-            filteredContents.map((item, index) => [index + 1, item.url])
-          );
-          setUrlMap(newUrlMap);
-
-          // 配列を文字列に結合（番号付け不要、formatInputDataで処理される）
+          console.log('Generating new summary...');
+          // 配列を文字列に結合
           const sourcesContent = filteredContents.map(item => item.content).join('\n');
 
           console.log('Starting article generation with query:', searchQuery);
@@ -98,7 +133,45 @@ export default function GeneratedAnswer({
             setContent('');
           } else {
             console.log('Article generation completed successfully');
+            console.log('Generated content length:', response.content.length);
             setContent(response.content);
+            
+            // Save to database
+            try {
+              console.log('Starting database save operation...');
+              console.log('Query ID:', parentQueryId);
+              console.log('Content preview:', response.content.substring(0, 100) + '...');
+
+              const supabase = createClient();
+              console.log('Supabase client created');
+
+              console.log('Attempting to insert data into summaries table...');
+              const { data, error: insertError } = await supabase
+                .from('summaries')
+                .insert({
+                  query_id: parentQueryId,
+                  summary_text: response.content,
+                  source_references: null
+                })
+                .select();
+
+              if (insertError) {
+                console.error('Error saving to database:', insertError);
+                console.error('Error details:', {
+                  code: insertError.code,
+                  message: insertError.message,
+                  details: insertError.details,
+                  hint: insertError.hint
+                });
+              } else {
+                console.log('Successfully saved to database');
+                console.log('Saved data:', data);
+              }
+            } catch (dbError) {
+              console.error('Database operation failed');
+              console.error('Error type:', dbError?.constructor?.name);
+              console.error('Full error:', dbError);
+            }
           }
         } catch (error) {
           console.error('Error fetching selected sources:', error);
@@ -110,7 +183,7 @@ export default function GeneratedAnswer({
         }
       };
 
-      fetchSelectedSources();
+      fetchData();
     }
   }, [isCompleted, parentQueryId, searchQuery]);
 
@@ -151,69 +224,54 @@ export default function GeneratedAnswer({
               />
             </div>
           )}
-          
+
           {isGenerating ? (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
-              {getPhaseText(currentPhase)}
+            <div className="flex flex-col items-center justify-center py-12 space-y-6">
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-black dark:bg-white animate-[bounce_1s_infinite_0ms]"></div>
+                <div className="w-3 h-3 rounded-full bg-black dark:bg-white animate-[bounce_1s_infinite_200ms]"></div>
+                <div className="w-3 h-3 rounded-full bg-black dark:bg-white animate-[bounce_1s_infinite_400ms]"></div>
+              </div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                {currentPhase ? (
+                  <div className="flex items-center gap-2">
+                    <span>{getPhaseText(currentPhase)}</span>
+                    <svg className="animate-spin h-4 w-4 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                ) : (
+                  <span>回答を生成中...</span>
+                )}
+              </div>
             </div>
-          ) : content ? (
-            <>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">回答</h2>
-                <CopyButton text={content} />
-              </div>
-              <div className="prose prose-sm max-w-none">
-                <ReactMarkdown
-                  components={{
-                    h1: ({ children }) => <h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>,
-                    h2: ({ children }) => <h2 className="text-xl font-bold mt-5 mb-3">{children}</h2>,
-                    p: ({ children }) => {
-                      if (typeof children === 'string') {
-                        // 引用番号のパターンを検出（連続する[n]も対応）
-                        const parts = children.split(/(\[\d+\](?:\[\d+\])*)/);
-                        
-                        return (
-                          <p className="my-3">
-                            {parts.map((part, i) => {
-                              if (part.match(/\[\d+\](?:\[\d+\])*$/)) {
-                                // 連続する引用番号を個別に処理
-                                const citations = Array.from(part.matchAll(/\[(\d+)\]/g));
-                                return (
-                                  <span key={`citations-${i}`} className="inline-flex gap-0.5">
-                                    {citations.map((citation, j) => {
-                                      const index = parseInt(citation[1], 10);
-                                      const sourceUrl = urlMap.get(index);
-                                      if (sourceUrl) {
-                                        return (
-                                          <CitationButton 
-                                            key={`citation-${i}-${j}`}
-                                            index={index} 
-                                            url={sourceUrl} 
-                                          />
-                                        );
-                                      }
-                                      return citation[0];
-                                    })}
-                                  </span>
-                                );
-                              }
-                              return <span key={`text-${i}`}>{part}</span>;
-                            })}
-                          </p>
-                        );
-                      }
-                      return <p className="my-3">{children}</p>;
-                    },
-                    strong: ({ children }) => <strong className="font-bold">{children}</strong>,
-                    em: ({ children }) => <em className="italic">{children}</em>
-                  }}
-                >
-                  {content}
-                </ReactMarkdown>
-              </div>
-            </>
-          ) : null}
+          ) : (
+            <div>
+              {content && (
+                <div className="relative group">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">回答</h2>
+                    <div className="absolute -right-2 -top-2">
+                      <CopyButton text={content} />
+                    </div>
+                  </div>
+                  <ReactMarkdown>{content}</ReactMarkdown>
+                  {urlMap.size > 0 && (
+                    <div className="mt-4">
+                      {Array.from(urlMap.entries()).map(([index, url]) => (
+                        <CitationButton
+                          key={`citation-${index}`}
+                          index={index}
+                          url={url}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

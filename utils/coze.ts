@@ -649,7 +649,8 @@ export async function storeDataWithEmbedding(
 export async function executeCozeQueries(
   subQueries: string[],
   userId?: string,
-  parentQueryId?: string
+  parentQueryId?: string,
+  onProgress?: (processed: number) => void
 ): Promise<FormattedResponse[]> {
   const results: FormattedResponse[] = [];
   
@@ -739,6 +740,7 @@ export async function executeCozeQueries(
       console.log(`Waiting ${BATCH_DELAY/1000} seconds before processing next batch...`);
       await sleep(BATCH_DELAY);
     }
+    if (onProgress) onProgress(i + batch.length);
   }
 
   return results;

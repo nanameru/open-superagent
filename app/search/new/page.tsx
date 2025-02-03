@@ -32,7 +32,7 @@ export default function SearchNewPage() {
   const [cozeResults, setCozeResults] = useState<any[]>([]);
   const [aggregatedPosts, setAggregatedPosts] = useState<Set<TwitterPost>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
-  const [status, setStatus] = useState<'understanding' | 'thinking' | 'processing' | 'generating' | 'completed'>('understanding');
+  const [status, setStatus] = useState<'understanding' | 'thinking' | 'processing' | 'generating' | 'completed' | 'error'>('understanding');
   const [isProcessExpanded, setIsProcessExpanded] = useState(true);
   const [totalPosts, setTotalPosts] = useState<number>(0);
   const [processedResults, setProcessedResults] = useState<Set<string>>(new Set());
@@ -41,6 +41,8 @@ export default function SearchNewPage() {
   const [parentQueryData, setParentQueryData] = useState<any>(null);
   const [dbSubQueries, setDbSubQueries] = useState<any[]>([]);
   const [selectedSources, setSelectedSources] = useState<any[]>([]);
+  const [processedQueries, setProcessedQueries] = useState<number>(0);
+  const [totalQueries, setTotalQueries] = useState<number>(0);
 
   useEffect(() => {
     const searchQuery = searchParams.get('q');
@@ -118,49 +120,106 @@ export default function SearchNewPage() {
               const formattedQueries = subQueries.map(q => ({ query: q.query_text }));
               setSubQueries(formattedQueries);
               
-              // 既存の結果を表示（型を明示的に指定）
-              const existingResults = (subQueries as SubQuery[]).map(subQuery => ({
-                query: subQuery.query_text,
-                posts: (subQuery.fetched_data || []).map(data => ({
-                  id: data.id,
-                  content: data.content,
-                  author: {
-                    username: data.source_title // source_titleをusernameとして使用
-                  },
-                  metadata: data.metadata
-                })),
-                sources: (subQuery.fetched_data || []).map((data: FetchedData) => ({
-                  title: data.source_title,
-                  url: data.source_url,
-                  content: data.content,
-                  ...(data.metadata || {})
-                }))
-              }));
+              // サブクエリのデータ存在チェックを改善
+              const checkFetchedData = async () => {
+                const { data: fetchedData, error: fetchError } = await supabase
+                  .from('fetched_data')
+                  .select('id')
+                  .eq('query_id', firstParentQuery.id);
 
-              setStatus('processing');
-              setCozeResults(existingResults);
+                if (fetchError) {
+                  console.error('Fetched data check error:', fetchError);
+                  return false;
+                }
+
+                return fetchedData && fetchedData.length > 0;
+              };
+
+              const hasData = await checkFetchedData();
               
-              // 投稿を集約する前にデータ形式を調整
-              const adjustedResults = existingResults.map(result => ({
-                ...result,
-                posts: result.posts.map(post => ({
-                  ...post,
-                  url: post.metadata?.url || `https://example.com/${post.id}`,
-                  domain: new URL(post.metadata?.url || `https://example.com/${post.id}`).hostname
-                }))
-              }));
-              
-              aggregatePostsFunc(adjustedResults);
-              
-              // 少し遅延を入れて状態遷移をスムーズに
-              setTimeout(() => {
-                setStatus('generating');
+              if (!hasData) {
+                // データが存在しない場合のみCoze検索を実行
+                setStatus('processing');
+                setTotalQueries(formattedQueries.length);
+                setProcessedQueries(0);
+                try {
+                  const results = await executeCozeQueries(
+                    formattedQueries.map(q => q.query), 
+                    session?.user?.id, 
+                    firstParentQuery.id,
+                    (processed) => {
+                      setProcessedQueries(processed);
+                    }
+                  );
+
+                  setProcessedQueries(formattedQueries.length);
+                  setCozeResults(results);
+                  
+                  // 少し待ってからデータの存在を再確認
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  
+                  const dataExists = await checkFetchedData();
+                  if (!dataExists) {
+                    console.error('No data found after Coze search');
+                    setStatus('error');
+                    return;
+                  }
+
+                  // ランク付けを実行
+                  await rerankSimilarDocuments(firstParentQuery.id);
+                  setStatus('generating');
+                  setTimeout(() => {
+                    setStatus('completed');
+                  }, 500);
+                } catch (error) {
+                  console.error('Error during Coze search:', error);
+                  setStatus('error');
+                }
+              } else {
+                // 既存の結果を表示（型を明示的に指定）
+                const existingResults = (subQueries as SubQuery[]).map(subQuery => ({
+                  query: subQuery.query_text,
+                  posts: (subQuery.fetched_data || []).map(data => ({
+                    id: data.id,
+                    content: data.content,
+                    author: {
+                      username: data.source_title // source_titleをusernameとして使用
+                    },
+                    metadata: data.metadata
+                  })),
+                  sources: (subQuery.fetched_data || []).map((data: FetchedData) => ({
+                    title: data.source_title,
+                    url: data.source_url,
+                    content: data.content,
+                    ...(data.metadata || {})
+                  }))
+                }));
+
+                setStatus('processing');
+                setCozeResults(existingResults);
+                
+                // 投稿を集約する前にデータ形式を調整
+                const adjustedResults = existingResults.map(result => ({
+                  ...result,
+                  posts: result.posts.map(post => ({
+                    ...post,
+                    url: post.metadata?.url || `https://example.com/${post.id}`,
+                    domain: new URL(post.metadata?.url || `https://example.com/${post.id}`).hostname
+                  }))
+                }));
+                
+                aggregatePostsFunc(adjustedResults);
+                
+                // 少し遅延を入れて状態遷移をスムーズに
                 setTimeout(() => {
-                  setStatus('completed');
+                  setStatus('generating');
+                  setTimeout(() => {
+                    setStatus('completed');
+                  }, 500);
                 }, 500);
-              }, 500);
-              
-              setIsLoading(false);
+                
+                setIsLoading(false);
+              }
             } else {
               // 親クエリは存在するがサブクエリがない場合は新規生成
               generateNewSubQueries(searchQuery, session?.user?.id, firstParentQuery.id);
@@ -521,19 +580,35 @@ export default function SearchNewPage() {
                     <div className={`transition-all duration-500 ${status === 'processing' ? 'opacity-100' : status === 'thinking' ? 'opacity-0 translate-y-4' : 'opacity-60'}`}>
                       <div className="group relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                        <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] min-h-[72px] flex items-center">
-                          <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-3">
-                              <div className="relative w-6 h-6 flex items-center justify-center">
-                                <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                        <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] min-h-[72px]">
+                          <div className="flex flex-col gap-3 w-full">
+                            {/* 上部: 検索状態と総件数 */}
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-3">
+                                <div className="relative w-6 h-6 flex items-center justify-center">
+                                  <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                                </div>
+                                <span className="text-sm font-medium text-black">Xから検索中...</span>
+                                <span className="text-sm text-gray-500">
+                                  {processedQueries}/{totalQueries} クエリ完了
+                                </span>
                               </div>
-                              <span className="text-sm font-medium text-black">Xから検索中...</span>
+                              {cozeResults && cozeResults.length > 0 && (
+                                <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] text-[#666666]">
+                                  {totalPosts} 件
+                                </span>
+                              )}
                             </div>
-                            {cozeResults && cozeResults.length > 0 && (
-                              <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] text-[#666666]">
-                                {totalPosts} 件
-                              </span>
-                            )}
+                            
+                            {/* 下部: プログレスバー */}
+                            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-black transition-all duration-300 rounded-full"
+                                style={{ 
+                                  width: `${totalQueries > 0 ? Math.min((processedQueries / totalQueries) * 100, 100) : 0}%` 
+                                }}
+                              />
+                            </div>
                           </div>
 
                           {/* 検索結果の表示 */}

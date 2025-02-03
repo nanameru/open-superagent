@@ -20,22 +20,26 @@ export default function SearchInput() {
     setInputText(text);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (inputText.trim()) {
       router.push(`/search/new?q=${encodeURIComponent(inputText.trim())}`);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto space-y-6">
+    <form onSubmit={(e) => e.preventDefault()} className="w-full max-w-2xl mx-auto space-y-6">
       <div className="relative">
         <div className="relative bg-[#F7F7F8] dark:bg-[#444654] rounded-xl">
-          <SearchTextarea value={inputText} onChange={setInputText} />
+          <SearchTextarea 
+            value={inputText} 
+            onChange={setInputText}
+            onSubmit={() => handleSubmit()}
+          />
         </div>
       </div>
       <Suggestions items={suggestions} onSuggestionClick={handleSuggestionClick} />
-      <button type="submit" className="hidden">Submit</button>
+      <button type="button" onClick={handleSubmit} className="hidden">Submit</button>
     </form>
   );
 }
