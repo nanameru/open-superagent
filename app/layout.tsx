@@ -1,5 +1,5 @@
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import Sidebar from "@/components/sidebar";
@@ -15,9 +15,9 @@ export const metadata = {
   description: "Your AI-powered knowledge companion",
 };
 
-const geistSans = Geist({
-  display: "swap",
+const inter = Inter({
   subsets: ["latin"],
+  display: "swap",
 });
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={geistSans.className} suppressHydrationWarning>
+    <html lang="en" className={inter.className} suppressHydrationWarning>
       <body className="bg-background text-foreground" suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
