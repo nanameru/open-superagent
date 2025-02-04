@@ -101,76 +101,47 @@ export default function GeneratedAnswer({
             return;
           }
 
-          // 保存された要約がない場合は、新しく生成
-          console.log('No existing summary found, checking sources...');
-          
-          if (!rags || rags.length === 0) {
-            console.log('No sources found, cannot generate summary');
-            setError('ソースが見つかりませんでした');
-            setIsGenerating(false);
-            return;
-          }
+          // ソースの内容を文字列として結合
+          const sourceContents = filteredContents
+            .map((item, index) => {
+              if (!item.content) return '';
+              // 各ソースの内容を1行にまとめる（改行を空白に置換）
+              const content = item.content.replace(/\n/g, ' ').trim();
+              return content;
+            })
+            .filter(Boolean)
+            .join('\n');
 
-          if (filteredContents.length === 0) {
-            console.log('No valid sources found after filtering');
-            setError('有効なソースが見つかりませんでした');
-            setIsGenerating(false);
-            return;
-          }
-
-          console.log('Generating new summary...');
-          // 配列を文字列に結合
-          const sourcesContent = filteredContents.map(item => item.content).join('\n');
-
-          console.log('Starting article generation with query:', searchQuery);
-          console.log('Selected sources count:', filteredContents.length);
-          
-          const response = await generateDetailedArticle(sourcesContent, searchQuery);
-          
-          if (response.error) {
-            console.error('Error in article generation:', response.error);
-            setError(response.error);
-            setContent('');
-          } else {
-            console.log('Article generation completed successfully');
-            console.log('Generated content length:', response.content.length);
-            setContent(response.content);
-            
-            // Save to database
+          // generateDetailedArticleを呼び出し
+          if (sourceContents) {
             try {
-              console.log('Starting database save operation...');
-              console.log('Query ID:', parentQueryId);
-              console.log('Content preview:', response.content.substring(0, 100) + '...');
+              console.log('Generating detailed article...');
+              const { content: generatedContent, error: genError } = await generateDetailedArticle(
+                sourceContents,
+                searchQuery
+              );
+              
+              if (genError) {
+                console.error('Error generating article:', genError);
+                setError('記事の生成中にエラーが発生しました。');
+              } else if (generatedContent) {
+                // 生成された記事を保存
+                const { error: insertError } = await supabase
+                  .from('summaries')
+                  .insert({
+                    query_id: parentQueryId,
+                    summary_text: generatedContent
+                  });
 
-              const supabase = createClient();
-              console.log('Supabase client created');
+                if (insertError) {
+                  console.error('Error saving summary:', insertError);
+                }
 
-              console.log('Attempting to insert data into summaries table...');
-              const { data, error: insertError } = await supabase
-                .from('summaries')
-                .insert({
-                  query_id: parentQueryId,
-                  summary_text: response.content,
-                  source_references: null
-                })
-                .select();
-
-              if (insertError) {
-                console.error('Error saving to database:', insertError);
-                console.error('Error details:', {
-                  code: insertError.code,
-                  message: insertError.message,
-                  details: insertError.details,
-                  hint: insertError.hint
-                });
-              } else {
-                console.log('Successfully saved to database');
-                console.log('Saved data:', data);
+                setContent(generatedContent);
               }
-            } catch (dbError) {
-              console.error('Database operation failed');
-              console.error('Error type:', dbError?.constructor?.name);
-              console.error('Full error:', dbError);
+            } catch (error) {
+              console.error('Error in article generation:', error);
+              setError('記事の生成中にエラーが発生しました。');
             }
           }
         } catch (error) {

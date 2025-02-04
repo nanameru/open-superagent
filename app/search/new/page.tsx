@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { createClient } from '@/utils/supabase/client';
 import { generateSubQueries } from '@/utils/meta-llama-3-70b-instruct-turbo';
 import { executeCozeQueries, rerankSimilarDocuments, storeDataWithEmbedding } from '@/utils/coze';
 import { TwitterPost } from '@/utils/coze';
@@ -10,7 +11,6 @@ import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
 import ProcessDetails from '@/components/search/process-details';
 import { SourceSidebar } from '@/components/search/source-sidebar';
-import { createClient } from '@/utils/supabase/client';
 
 // 型定義を追加
 type FetchedData = {
@@ -498,10 +498,6 @@ function SearchContent() {
                 <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 text-gray-600">
                   <span className="w-1 h-1 rounded-full bg-gray-900"></span>
                   {totalPosts}ソース
-                </span>
-                <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 text-gray-600">
-                  <span className="w-1 h-1 rounded-full bg-gray-900"></span>
-                  {languageCount}言語
                 </span>
               </div>
             </div>
