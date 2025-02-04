@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { generateSubQueries } from '@/utils/meta-llama-3-70b-instruct-turbo';
@@ -26,6 +27,14 @@ type SubQuery = {
 };
 
 export default function SearchNewPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SearchContent />
+    </Suspense>
+  );
+}
+
+function SearchContent() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState<string>('');
   const [subQueries, setSubQueries] = useState<Array<{ query: string }>>([]);
