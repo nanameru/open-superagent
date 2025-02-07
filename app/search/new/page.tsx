@@ -4,7 +4,8 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { generateSubQueries } from '@/utils/meta-llama-3-70b-instruct-turbo';
+import { generateSubQueries as generateSubQueriesGemini } from '@/utils/gemini-2.0-flash-001';
+import { generateSubQueries as generateSubQueriesO3 } from '@/utils/o3-mini';
 import { executeCozeQueries, rerankSimilarDocuments, storeDataWithEmbedding } from '@/utils/coze';
 import { TwitterPost } from '@/utils/coze';
 import SubQueries from '@/components/search/sub-queries';
@@ -331,64 +332,83 @@ function SearchContent() {
 
   const generateNewSubQueries = async (searchQuery: string, userId: string | undefined, parentId: string) => {
     setStatus('understanding');
-    setTimeout(() => {
+    
+    // サブスクリプションステータスを確認
+    const supabase = createClient();
+    let subscriptionStatus = '';
+    
+    if (userId) {
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('subscription_status')
+        .eq('id', userId)
+        .single();
+
+      if (userError) {
+        console.error('Error fetching user subscription status:', userError);
+      } else {
+        subscriptionStatus = userData?.subscription_status || '';
+      }
+    }
+
+    // サブスクリプションステータスに応じて適切な関数を選択
+    const generateSubQueries = subscriptionStatus === 'active' 
+      ? generateSubQueriesO3 
+      : generateSubQueriesGemini;
+
+    console.log('[SubQuery Generation] Using AI Model:', subscriptionStatus === 'active' ? 'O3 Mini' : 'Gemini 2.0 Flash 001');
+
+    try {
       setStatus('thinking');
-      setTimeout(() => {
-        generateSubQueries(searchQuery)
-          .then(async (response) => {
-            const formattedQueries = response.map(query => ({ query }));
-            setSubQueries(formattedQueries);
-            setStatus('processing');
+      const response = await generateSubQueries(searchQuery);
+      const formattedQueries = response.map(query => ({ query }));
+      setSubQueries(formattedQueries);
+      setStatus('processing');
 
-            // サブクエリを保存
-            const supabase = createClient();
-            const saveSubQueries = formattedQueries.map(async (q) => {
-              try {
-                const { error } = await supabase
-                  .from('queries')
-                  .insert({
-                    user_id: userId,
-                    query_text: q.query,
-                    query_type: 'auto',
-                    parent_query_id: parentId
-                  });
-
-                if (error) {
-                  console.error('Error saving sub query:', error);
-                  return;
-                }
-              } catch (error) {
-                console.error('Error in saveSubQueries:', error);
-              }
+      // サブクエリを保存
+      const saveSubQueries = formattedQueries.map(async (q) => {
+        try {
+          const { error } = await supabase
+            .from('queries')
+            .insert({
+              user_id: userId,
+              query_text: q.query,
+              query_type: 'auto',
+              parent_query_id: parentId
             });
 
-            await Promise.all(saveSubQueries);
+          if (error) {
+            console.error('Error saving sub query:', error);
+            return;
+          }
+        } catch (error) {
+          console.error('Error in saveSubQueries:', error);
+        }
+      });
 
-            // Cozeクエリを実行
-            executeCozeQueries(formattedQueries.map(q => q.query), userId, parentId)
-              .then(async (results) => {
-                setCozeResults(results);
-                
-                // ランク付けを実行
-                try {
-                  await rerankSimilarDocuments(parentId);
-                } catch (error) {
-                  console.error('Error reranking documents:', error);
-                }
+      await Promise.all(saveSubQueries);
 
-                setStatus('completed');
-              })
-              .catch((error) => {
-                console.error('Error executing Coze queries:', error);
-                setStatus('completed');
-              });
-          })
-          .catch((error) => {
-            console.error('Error generating sub queries:', error);
-            setStatus('completed');
-          });
-      }, 1000);
-    }, 1000);
+      // Cozeクエリを実行
+      try {
+        const results = await executeCozeQueries(formattedQueries.map(q => q.query), userId, parentId);
+        setCozeResults(results);
+        
+        // ランク付けを実行
+        try {
+          await rerankSimilarDocuments(parentId);
+        } catch (error) {
+          console.error('Error reranking documents:', error);
+        }
+
+        setStatus('completed');
+      } catch (error) {
+        console.error('Error executing Coze queries:', error);
+        setStatus('completed');
+      }
+    } catch (error) {
+      console.error('Error generating sub queries:', error);
+      setStatus('completed');
+    }
   };
 
   const createNewParentQuery = async (searchQuery: string, userId: string | undefined) => {

@@ -9,19 +9,19 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
 
     try {
-      console.log(`[Llama API] Attempt ${attempt} - Starting request`);
+      console.log(`[Gemini API] Attempt ${attempt} - Starting request`);
       
       // APIキーのチェックを強化
-      const apiKey = process.env.TOGETHER_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        console.error('[Llama API] No API key found in environment variables');
+        console.error('[Gemini API] No API key found in environment variables');
         throw new Error('API key is not configured');
       }
       
-      console.log(`[Llama API] Using API key: ${apiKey ? '✓ Present' : '✗ Missing'}`);
+      console.log(`[Gemini API] Using API key: ${apiKey ? '✓ Present' : '✗ Missing'}`);
 
       const currentDate = new Date().toISOString().split('T')[0];
-      const systemPrompt = `
+      const prompt = `
 あなたは「GPT-4レベルのAI」であり、「PitattoAI」のサブクエリ生成アシスタントです。
 あなたの役割は、ユーザーの入力から「X(Twitter)検索で多くヒットしそうなサブクエリ」を自動生成することです。
 
@@ -48,9 +48,8 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
    - lang:zh → min_faves:300  
 
 4. **クエリ形式**  
-   \`"<キーワード(1～2語)> [追加語] min_faves:X lang:xx [since:YYYY-MM-DD until:YYYY-MM-DD]"\``;
+   \`"<キーワード(1～2語)> [追加語] min_faves:X lang:xx [since:YYYY-MM-DD until:YYYY-MM-DD]"\`
 
-      const userPrompt = `
 以下のクエリから、X(Twitter)検索用のサブクエリを生成してください：
 
 <<USER_QUERY>> = "${userQuery}"
@@ -72,19 +71,17 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
      ...
    ]`;
 
-      const response = await fetch('https://api.together.xyz/v1/chat/completions', {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          stream: false
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }]
         }),
         signal: controller.signal
       });
@@ -93,22 +90,22 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
 
       if (!response.ok) {
         const errorData = await response.text();
-        console.error('[Llama API] Error response:', errorData);
+        console.error('[Gemini API] Error response:', errorData);
         throw new Error(`API request failed with status ${response.status}`);
       }
 
       const data = await response.json();
-      const content = data.choices[0].message.content;
+      const content = data.candidates[0].content.parts[0].text;
       
-      console.log('[Llama API] Final content:', content);
+      console.log('[Gemini API] Final content:', content);
 
       if (!content) {
-        console.error('[Llama API] No content in response');
+        console.error('[Gemini API] No content in response');
         return [];
       }
       
       try {
-        console.log('[Llama API] Attempting to parse response content:', content);
+        console.log('[Gemini API] Attempting to parse response content:', content);
         
         // コードブロックと配列の装飾を削除
         const cleanContent = content
@@ -128,8 +125,8 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
             });
           }
         } catch (e) {
-          console.error('[Llama API] Failed to parse response as JSON:', e);
-          console.error('[Llama API] Raw content that failed to parse:', cleanContent);
+          console.error('[Gemini API] Failed to parse response as JSON:', e);
+          console.error('[Gemini API] Raw content that failed to parse:', cleanContent);
           return [];
         }
 
@@ -146,20 +143,20 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
           })
           .filter((q): q is string => q !== null);
 
-        console.log('[Llama API] Successfully parsed queries:', results);
+        console.log('[Gemini API] Successfully parsed queries:', results);
         return results;
       } catch (e) {
-        console.error('[Llama API] Failed to parse response:', e);
-        console.error('[Llama API] Raw content that failed to parse:', content);
+        console.error('[Gemini API] Failed to parse response:', e);
+        console.error('[Gemini API] Raw content that failed to parse:', content);
         return [];
       }
       
     } catch (error) {
       clearTimeout(timeoutId);
-      console.error(`[Llama API] Error on attempt ${attempt}:`, error);
+      console.error(`[Gemini API] Error on attempt ${attempt}:`, error);
       
       if (error instanceof Error) {
-        console.error('[Llama API] Error details:', {
+        console.error('[Gemini API] Error details:', {
           name: error.name,
           message: error.message,
           stack: error.stack
@@ -167,10 +164,10 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
 
         // AbortError（タイムアウト）の場合は特別なハンドリング
         if (error.name === 'AbortError') {
-          console.error('[Llama API] Request timed out');
+          console.error('[Gemini API] Request timed out');
           if (attempt < MAX_RETRIES) {
             const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
-            console.log(`[Llama API] Retrying after timeout in ${delay}ms...`);
+            console.log(`[Gemini API] Retrying after timeout in ${delay}ms...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             return makeRequest(attempt + 1);
           }
@@ -179,15 +176,15 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
       
       if (attempt < MAX_RETRIES) {
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000); // exponential backoff
-        console.log(`[Llama API] Retrying in ${delay}ms...`);
+        console.log(`[Gemini API] Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         return makeRequest(attempt + 1);
       }
       
-      console.error('[Llama API] Max retries reached, failing');
+      console.error('[Gemini API] Max retries reached, failing');
       return [];
     }
   };
 
   return makeRequest();
-} 
+}

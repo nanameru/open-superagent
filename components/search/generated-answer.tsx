@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { TwitterPost } from '@/utils/coze';
-import { generateDetailedArticle } from '@/utils/meta-llama-3-70b-instruct-turbo-article';
+import { generateDetailedArticle as generateDetailedArticleGemini } from '@/utils/gemini-2.0-flash-001-article';
+import { generateDetailedArticle as generateDetailedArticleO3 } from '@/utils/o3-mini-article';
 import { SourceList } from './source-list';
 import { SourcePreview } from './source-preview';
 import { createClient } from '@/utils/supabase/client';
@@ -116,6 +117,34 @@ export default function GeneratedAnswer({
           if (sourceContents) {
             try {
               console.log('Generating detailed article...');
+              
+              // サブスクリプションステータスを確認
+              const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select('subscription_status, id')
+                .single();
+
+              if (userError) {
+                console.error('Error fetching user subscription status:', userError);
+              }
+
+              console.log('User data:', {
+                id: userData?.id,
+                subscription_status: userData?.subscription_status || 'not set'
+              });
+
+              // サブスクリプションステータスに応じて適切な関数を選択
+              const generateDetailedArticle = userData?.subscription_status === 'active'
+                ? generateDetailedArticleO3
+                : generateDetailedArticleGemini;
+
+              console.log('[Article Generation] Using AI Model:', userData?.subscription_status === 'active' ? 'O3 Mini' : 'Gemini 2.0 Flash 001');
+
+              // データの保存完了後に少し待機
+              console.log('Waiting for data processing to complete...');
+              await new Promise(resolve => setTimeout(resolve, 3000)); // 3秒待機
+
+              console.log('Starting article generation...');
               const { content: generatedContent, error: genError } = await generateDetailedArticle(
                 sourceContents,
                 searchQuery
@@ -227,41 +256,72 @@ export default function GeneratedAnswer({
                       <CopyButton text={content} />
                     </div>
                   </div>
-                  <ReactMarkdown
-                    components={{
-                      p: ({ children }) => {
-                        const text = children?.toString() || '';
-                        // 数字のリストのパターンを検出して除外
-                        if (/^\d+(\s+\d+)*$/.test(text.trim())) {
-                          return null;
-                        }
-                        // 引用番号のパターン（[数字]）を検出
-                        const parts = text.split(/(\[\d+\])/g);
-                        return (
-                          <p>
-                            {parts.map((part, index) => {
-                              const match = part.match(/\[(\d+)\]/);
-                              if (match) {
-                                const citationNumber = parseInt(match[1]);
-                                const url = urlMap.get(citationNumber);
-                                return url ? (
-                                  <CitationButton
-                                    key={`inline-citation-${index}`}
-                                    index={citationNumber}
-                                    url={url}
-                                    inline={true}
-                                  />
-                                ) : part;
-                              }
-                              return part;
-                            })}
-                          </p>
-                        );
-                      }
-                    }}
-                  >
-                    {content}
-                  </ReactMarkdown>
+                  <div className="mt-4 space-y-4">
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => (
+                            <h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className="text-xl font-semibold mt-4 mb-3">{children}</h2>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-bold">{children}</strong>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="list-disc pl-6 my-2">{children}</ul>
+                          ),
+                          li: ({ children }) => (
+                            <li className="my-1">{children}</li>
+                          ),
+                          p: ({ children }) => {
+                            // childrenが配列の場合は文字列に変換
+                            const processChildren = (child: any): string => {
+                              if (typeof child === 'string') return child;
+                              if (Array.isArray(child)) return child.map(processChildren).join('');
+                              // ReactElementの場合は空文字を返す（[object Object]の表示を防ぐ）
+                              return '';
+                            };
+
+                            const text = Array.isArray(children) 
+                              ? children.map(processChildren).join('')
+                              : processChildren(children);
+
+                            // 数字のリストのパターンを検出して除外
+                            if (/^\d+(\s+\d+)*$/.test(text.trim())) {
+                              return null;
+                            }
+
+                            // 引用番号のパターン（[数字]）を検出
+                            const parts = text.split(/(\[\d+\])/g);
+                            return (
+                              <p className="my-2">
+                                {parts.map((part, index) => {
+                                  const match = part.match(/\[(\d+)\]/);
+                                  if (match) {
+                                    const citationNumber = parseInt(match[1]);
+                                    const url = urlMap.get(citationNumber);
+                                    return url ? (
+                                      <CitationButton
+                                        key={`inline-citation-${index}`}
+                                        index={citationNumber}
+                                        url={url}
+                                        inline={true}
+                                      />
+                                    ) : part;
+                                  }
+                                  return part;
+                                })}
+                              </p>
+                            );
+                          }
+                        }}
+                      >
+                        {content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
