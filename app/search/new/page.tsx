@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { generateSubQueries as generateSubQueriesGemini } from '@/utils/gemini-2.0-flash-001';
 import { executeCozeQueries, rerankSimilarDocuments, storeDataWithEmbedding } from '@/utils/coze';
@@ -25,6 +25,29 @@ type SubQuery = {
   query_text: string;
   fetched_data?: FetchedData[];
 };
+
+enum QueryType {
+  USER = 'user',
+  AUTO = 'auto'
+}
+
+// デバウンス用のカスタムフック
+function useDebounce<T extends (...args: any[]) => any>(
+  callback: T,
+  delay: number
+) {
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+  return useCallback((...args: Parameters<T>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      callback(...args);
+    }, delay);
+  }, [callback, delay]);
+}
 
 export default function SearchNewPage() {
   return (
@@ -53,14 +76,159 @@ function SearchContent() {
   const [processedQueries, setProcessedQueries] = useState<number>(0);
   const [totalQueries, setTotalQueries] = useState<number>(0);
 
+  const createNewParentQuery = useCallback(async (searchQuery: string, userId: string | undefined) => {
+    setQuery(searchQuery);
+    const supabase = createClient();
+    
+    // ロックキーの設定
+    const lockKey = `query_lock_${userId}_${searchQuery}`;
+    const lockTimeout = 5000; // 5秒
+
+    // ロックチェック
+    if (localStorage.getItem(lockKey)) {
+      console.log('Query creation is locked');
+      return;
+    }
+
+    try {
+      localStorage.setItem(lockKey, 'true');
+      
+      // 日付範囲の設定
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // 既存のクエリをチェック
+      const { data: existingQuery, error: checkError } = await supabase
+        .from('queries')
+        .select('*')
+        .eq('query_text', searchQuery)
+        .eq('query_type', QueryType.USER)
+        .eq('user_id', userId)
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking existing query:', checkError);
+        return;
+      }
+
+      let queryToUse = existingQuery;
+
+      if (!existingQuery) {
+        const { data: newQuery, error: insertError } = await supabase
+          .from('queries')
+          .insert({
+            user_id: userId,
+            query_text: searchQuery,
+            query_type: QueryType.USER,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Error creating new query:', insertError);
+          return;
+        }
+
+        queryToUse = newQuery;
+        
+        // 新規クエリの場合のみ、新しいサブクエリと回答を生成
+        await storeDataWithEmbedding(
+          searchQuery,
+          [{
+            sourceTitle: 'User Query',
+            sourceUrl: '',
+            content: searchQuery,
+            metadata: {
+              type: 'user_query',
+              timestamp: new Date().toISOString()
+            }
+          }],
+          userId
+        );
+
+        generateNewSubQueries(searchQuery, userId, queryToUse.id);
+      } else {
+        // 既存のクエリが見つかった場合、関連データを取得
+        
+        // サブクエリを取得
+        const { data: existingSubQueries, error: subQueryError } = await supabase
+          .from('queries')
+          .select('*')
+          .eq('parent_query_id', queryToUse.id)
+          .eq('query_type', QueryType.AUTO)
+          .order('created_at', { ascending: true });
+
+        if (subQueryError) {
+          console.error('Error fetching existing sub-queries:', subQueryError);
+        } else if (existingSubQueries) {
+          setDbSubQueries(existingSubQueries);
+          setSubQueries(existingSubQueries.map(sq => ({
+            id: sq.id,
+            query_text: sq.query_text,
+            fetched_data: []
+          })));
+        }
+
+        // 回答を取得
+        const { data: existingResults, error: resultsError } = await supabase
+          .from('query_results')
+          .select('*')
+          .eq('query_id', queryToUse.id)
+          .order('created_at', { ascending: true });
+
+        if (resultsError) {
+          console.error('Error fetching existing results:', resultsError);
+        } else if (existingResults) {
+          const posts = new Set<TwitterPost>();
+          existingResults.forEach(result => {
+            try {
+              const parsedPosts = JSON.parse(result.content);
+              parsedPosts.forEach((post: TwitterPost) => {
+                posts.add(post);
+              });
+            } catch (e) {
+              console.error('Error parsing result content:', e);
+            }
+          });
+          setAggregatedPosts(posts);
+          setTotalPosts(posts.size);
+        }
+
+        // プロセスステータスを完了に設定
+        setStatus('completed');
+      }
+
+      if (queryToUse) {
+        setParentQueryData(queryToUse);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Unexpected error creating parent query:', error);
+    } finally {
+      // 処理完了後にロックを解除（タイムアウト付き）
+      setTimeout(() => {
+        localStorage.removeItem(lockKey);
+      }, lockTimeout);
+    }
+  }, []);
+
+  // デバウンスされたクエリ作成関数
+  const debouncedCreateQuery = useDebounce(createNewParentQuery, 1000);
+
   useEffect(() => {
     const searchQuery = searchParams.get('q');
-    if (searchQuery) {
+    if (searchQuery && !isLoading) {
       const fetchQueriesFromDb = async () => {
         const supabase = createClient();
 
         try {
-          // セッションの確認
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
           if (sessionError) {
@@ -73,177 +241,13 @@ function SearchContent() {
             return;
           }
 
-          // 親クエリを取得
-          const today = new Date();
-          today.setHours(0, 0, 0, 0); // 今日の0時0分0秒に設定
-          const tomorrow = new Date(today);
-          tomorrow.setDate(tomorrow.getDate() + 1); // 明日の0時0分0秒
-
-          const { data: parentQuery, error: parentError } = await supabase
-            .from('queries')
-            .select('*')
-            .eq('query_text', searchQuery)
-            .eq('query_type', 'user')
-            .eq('user_id', session.user.id)
-            .gte('created_at', today.toISOString())
-            .lt('created_at', tomorrow.toISOString())
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-          if (parentError) {
-            console.error('Parent query fetch error:', parentError);
-            // エラーがあっても処理を継続
-            setQuery(searchQuery);
-            return;
-          }
-
-          // データが存在するかチェック
-          if (parentQuery && parentQuery.length > 0) {
-            const firstParentQuery = parentQuery[0];
-            setParentQueryData(firstParentQuery);
-            setQuery(firstParentQuery.query_text);
-
-            // サブクエリと関連する結果を取得
-            const { data: subQueries, error: subError } = await supabase
-              .from('queries')
-              .select(`
-                *,
-                fetched_data (
-                  id,
-                  content,
-                  source_title,
-                  source_url,
-                  metadata
-                )
-              `)
-              .eq('parent_query_id', firstParentQuery.id)
-              .eq('query_type', 'auto');
-
-            if (subError) {
-              console.error('Sub queries fetch error:', subError);
-              return;
-            }
-
-            if (subQueries && subQueries.length > 0) {
-              setDbSubQueries(subQueries);
-              const formattedQueries = subQueries.map(q => ({ query_text: q.query_text, fetched_data: q.fetched_data }));
-              setSubQueries(formattedQueries);
-              
-              // サブクエリのデータ存在チェックを改善
-              const checkFetchedData = async () => {
-                const { data: fetchedData, error: fetchError } = await supabase
-                  .from('fetched_data')
-                  .select('id')
-                  .eq('query_id', firstParentQuery.id);
-
-                if (fetchError) {
-                  console.error('Fetched data check error:', fetchError);
-                  return false;
-                }
-
-                return fetchedData && fetchedData.length > 0;
-              };
-
-              const hasData = await checkFetchedData();
-              
-              if (!hasData) {
-                // データが存在しない場合のみCoze検索を実行
-                setStatus('processing');
-                setTotalQueries(formattedQueries.length);
-                setProcessedQueries(0);
-                try {
-                  const results = await executeCozeQueries(
-                    formattedQueries.map(q => q.query_text), 
-                    session?.user?.id, 
-                    firstParentQuery.id,
-                    (processed) => {
-                      setProcessedQueries(processed);
-                    }
-                  );
-
-                  setProcessedQueries(formattedQueries.length);
-                  setCozeResults(results);
-                  
-                  // 少し待ってからデータの存在を再確認
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                  
-                  const dataExists = await checkFetchedData();
-                  if (!dataExists) {
-                    console.error('No data found after Coze search');
-                    setStatus('error');
-                    return;
-                  }
-
-                  // ランク付けを実行
-                  await rerankSimilarDocuments(firstParentQuery.id);
-                  setStatus('generating');
-                  setTimeout(() => {
-                    setStatus('completed');
-                  }, 500);
-                } catch (error) {
-                  console.error('Error during Coze search:', error);
-                  setStatus('error');
-                }
-              } else {
-                // 既存の結果を表示（型を明示的に指定）
-                const existingResults = (subQueries as SubQuery[]).map(subQuery => ({
-                  query: subQuery.query_text,
-                  posts: (subQuery.fetched_data || []).map(data => ({
-                    id: data.id,
-                    content: data.content,
-                    author: {
-                      username: data.source_title // source_titleをusernameとして使用
-                    },
-                    metadata: data.metadata
-                  })),
-                  sources: (subQuery.fetched_data || []).map((data: FetchedData) => ({
-                    title: data.source_title,
-                    url: data.source_url,
-                    content: data.content,
-                    ...(data.metadata || {})
-                  }))
-                }));
-
-                setStatus('processing');
-                setCozeResults(existingResults);
-                
-                // 投稿を集約する前にデータ形式を調整
-                const adjustedResults = existingResults.map(result => ({
-                  ...result,
-                  posts: result.posts.map(post => ({
-                    ...post,
-                    url: post.metadata?.url || `https://example.com/${post.id}`,
-                    domain: new URL(post.metadata?.url || `https://example.com/${post.id}`).hostname
-                  }))
-                }));
-                
-                aggregatePostsFunc(adjustedResults);
-                
-                // 少し遅延を入れて状態遷移をスムーズに
-                setTimeout(() => {
-                  setStatus('generating');
-                  setTimeout(() => {
-                    setStatus('completed');
-                  }, 500);
-                }, 500);
-                
-                setIsLoading(false);
-              }
-            } else {
-              // 親クエリは存在するがサブクエリがない場合は新規生成
-              generateNewSubQueries(searchQuery, session?.user?.id, firstParentQuery.id);
-            }
-          } else {
-            // 親クエリが見つからない場合は、新規作成
-            createNewParentQuery(searchQuery, session?.user?.id);
-          }
+          debouncedCreateQuery(searchQuery, session.user.id);
         } catch (error) {
           console.error('Unexpected error:', error);
           setQuery(searchQuery);
         }
       };
 
-      // 検索を開始
       fetchQueriesFromDb();
 
       // 新しい検索開始時にデータをクリア
@@ -253,7 +257,7 @@ function SearchContent() {
       
       setIsLoading(true);
     }
-  }, [searchParams]);
+  }, [searchParams, debouncedCreateQuery, isLoading]);
 
   useEffect(() => {
     if (status === 'completed') {
@@ -374,7 +378,7 @@ function SearchContent() {
             .insert({
               user_id: userId,
               query_text: q.query_text,
-              query_type: 'auto',
+              query_type: QueryType.AUTO,
               parent_query_id: parentId
             });
 
@@ -409,53 +413,6 @@ function SearchContent() {
     } catch (error) {
       console.error('Error generating sub queries:', error);
       setStatus('completed');
-    }
-  };
-
-  const createNewParentQuery = async (searchQuery: string, userId: string | undefined) => {
-    setQuery(searchQuery);
-    const supabase = createClient();
-    
-    try {
-      // 親クエリを作成
-      const { data: newParentQuery, error: parentError } = await supabase
-        .from('queries')
-        .insert({
-          user_id: userId,
-          query_text: searchQuery,
-          query_type: 'user',
-        })
-        .select()
-        .single();
-
-      if (parentError) {
-        console.error('Error creating parent query:', parentError);
-        return;
-      }
-
-      if (newParentQuery) {
-        setParentQueryData(newParentQuery);
-
-        // ユーザーの最初のクエリをfetched_dataテーブルに保存
-        await storeDataWithEmbedding(
-          searchQuery,
-          [{
-            sourceTitle: 'User Query',
-            sourceUrl: '', // ユーザークエリなのでURLは空
-            content: searchQuery,
-            metadata: {
-              type: 'user_query',
-              timestamp: new Date().toISOString(),
-            }
-          }],
-          userId
-        );
-
-        // 新しいサブクエリを生成
-        generateNewSubQueries(searchQuery, userId, newParentQuery.id);
-      }
-    } catch (error) {
-      console.error('Unexpected error creating parent query:', error);
     }
   };
 
