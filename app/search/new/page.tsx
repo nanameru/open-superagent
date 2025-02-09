@@ -37,7 +37,7 @@ export default function SearchNewPage() {
 function SearchContent() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState<string>('');
-  const [subQueries, setSubQueries] = useState<Array<{ query: string }>>([]);
+  const [subQueries, setSubQueries] = useState<SubQuery[]>([]);
   const [cozeResults, setCozeResults] = useState<any[]>([]);
   const [aggregatedPosts, setAggregatedPosts] = useState<Set<TwitterPost>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -126,7 +126,7 @@ function SearchContent() {
 
             if (subQueries && subQueries.length > 0) {
               setDbSubQueries(subQueries);
-              const formattedQueries = subQueries.map(q => ({ query: q.query_text }));
+              const formattedQueries = subQueries.map(q => ({ query_text: q.query_text, fetched_data: q.fetched_data }));
               setSubQueries(formattedQueries);
               
               // サブクエリのデータ存在チェックを改善
@@ -153,7 +153,7 @@ function SearchContent() {
                 setProcessedQueries(0);
                 try {
                   const results = await executeCozeQueries(
-                    formattedQueries.map(q => q.query), 
+                    formattedQueries.map(q => q.query_text), 
                     session?.user?.id, 
                     firstParentQuery.id,
                     (processed) => {
@@ -262,6 +262,32 @@ function SearchContent() {
   }, [status]);
 
   useEffect(() => {
+    const fetchTotalPosts = async () => {
+      if (!parentQueryData?.id) {
+        console.log('No parentQueryData.id available');
+        return;
+      }
+
+      console.log('Fetching posts for parent query ID:', parentQueryData.id);
+      const supabase = createClient();
+      const { count, error } = await supabase
+        .from('fetched_data')
+        .select('*', { count: 'exact', head: true })
+        .eq('query_id', parentQueryData.id);
+
+      if (error) {
+        console.error('Error fetching total posts:', error);
+        return;
+      }
+
+      console.log('Total posts found:', count);
+      setTotalPosts(count || 0);
+    };
+
+    fetchTotalPosts();
+  }, [parentQueryData?.id]);
+
+  useEffect(() => {
     // cozeResultsが更新されるたびに実行
     if (cozeResults && cozeResults.length > 0) {
       // 新しい結果のみを処理
@@ -286,10 +312,10 @@ function SearchContent() {
     }
   }, [cozeResults]);
 
-  const updateLanguageCount = (queries: Array<{ query: string }>) => {
+  const updateLanguageCount = (queries: SubQuery[]) => {
     const languages = new Set<string>();
     queries.forEach(queryItem => {
-      const lang = queryItem.query.match(/lang:(ja|en|zh)/)?.[1];
+      const lang = queryItem.query_text.match(/lang:(ja|en|zh)/)?.[1];
       if (lang) languages.add(lang);
     });
     setLanguageCount(languages.size);
@@ -336,7 +362,7 @@ function SearchContent() {
     try {
       setStatus('thinking');
       const response = await generateSubQueriesGemini(searchQuery);
-      const formattedQueries = response.map(query => ({ query }));
+      const formattedQueries = response.map(query => ({ query_text: query, fetched_data: [] }));
       setSubQueries(formattedQueries);
       setStatus('processing');
 
@@ -347,7 +373,7 @@ function SearchContent() {
             .from('queries')
             .insert({
               user_id: userId,
-              query_text: q.query,
+              query_text: q.query_text,
               query_type: 'auto',
               parent_query_id: parentId
             });
@@ -365,7 +391,7 @@ function SearchContent() {
 
       // Cozeクエリを実行
       try {
-        const results = await executeCozeQueries(formattedQueries.map(q => q.query), userId, parentId);
+        const results = await executeCozeQueries(formattedQueries.map(q => q.query_text), userId, parentId);
         setCozeResults(results);
         
         // ランク付けを実行
@@ -569,7 +595,13 @@ function SearchContent() {
                               {subQueries.length} 件
                             </span>
                           </div>
-                          <SubQueries queries={subQueries} isLoading={isLoading} />
+                          <SubQueries 
+                            queries={subQueries.map(sq => ({ 
+                              query: sq.query_text,
+                              query_text: sq.query_text
+                            }))} 
+                            isLoading={isLoading} 
+                          />
                         </div>
                       </div>
                     </div>
