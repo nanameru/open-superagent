@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { TwitterPost } from '@/utils/coze';
 import { generateDetailedArticle as generateDetailedArticleGemini } from '@/utils/gemini-2.0-flash-001-article';
-import { generateDetailedArticle as generateDetailedArticleO3 } from '@/utils/o3-mini-article';
 import { SourceList } from './source-list';
 import { SourcePreview } from './source-preview';
 import { createClient } from '@/utils/supabase/client';
@@ -118,34 +117,12 @@ export default function GeneratedAnswer({
             try {
               console.log('Generating detailed article...');
               
-              // サブスクリプションステータスを確認
-              const { data: userData, error: userError } = await supabase
-                .from('users')
-                .select('subscription_status, id')
-                .single();
-
-              if (userError) {
-                console.error('Error fetching user subscription status:', userError);
-              }
-
-              console.log('User data:', {
-                id: userData?.id,
-                subscription_status: userData?.subscription_status || 'not set'
-              });
-
-              // サブスクリプションステータスに応じて適切な関数を選択
-              const generateDetailedArticle = userData?.subscription_status === 'active'
-                ? generateDetailedArticleO3
-                : generateDetailedArticleGemini;
-
-              console.log('[Article Generation] Using AI Model:', userData?.subscription_status === 'active' ? 'O3 Mini' : 'Gemini 2.0 Flash 001');
-
               // データの保存完了後に少し待機
               console.log('Waiting for data processing to complete...');
               await new Promise(resolve => setTimeout(resolve, 3000)); // 3秒待機
 
               console.log('Starting article generation...');
-              const { content: generatedContent, error: genError } = await generateDetailedArticle(
+              const { content: generatedContent, error: genError } = await generateDetailedArticleGemini(
                 sourceContents,
                 searchQuery
               );

@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { generateSubQueries as generateSubQueriesGemini } from '@/utils/gemini-2.0-flash-001';
-import { generateSubQueries as generateSubQueriesO3 } from '@/utils/o3-mini';
 import { executeCozeQueries, rerankSimilarDocuments, storeDataWithEmbedding } from '@/utils/coze';
 import { TwitterPost } from '@/utils/coze';
 import SubQueries from '@/components/search/sub-queries';
@@ -332,35 +331,11 @@ function SearchContent() {
 
   const generateNewSubQueries = async (searchQuery: string, userId: string | undefined, parentId: string) => {
     setStatus('understanding');
-    
-    // サブスクリプションステータスを確認
     const supabase = createClient();
-    let subscriptionStatus = '';
     
-    if (userId) {
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('subscription_status')
-        .eq('id', userId)
-        .single();
-
-      if (userError) {
-        console.error('Error fetching user subscription status:', userError);
-      } else {
-        subscriptionStatus = userData?.subscription_status || '';
-      }
-    }
-
-    // サブスクリプションステータスに応じて適切な関数を選択
-    const generateSubQueries = subscriptionStatus === 'active' 
-      ? generateSubQueriesO3 
-      : generateSubQueriesGemini;
-
-    console.log('[SubQuery Generation] Using AI Model:', subscriptionStatus === 'active' ? 'O3 Mini' : 'Gemini 2.0 Flash 001');
-
     try {
       setStatus('thinking');
-      const response = await generateSubQueries(searchQuery);
+      const response = await generateSubQueriesGemini(searchQuery);
       const formattedQueries = response.map(query => ({ query }));
       setSubQueries(formattedQueries);
       setStatus('processing');
