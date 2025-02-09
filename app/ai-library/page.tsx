@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { useAdminCheck } from '@/hooks/use-admin-check'
 import AIToolGrid from '@/components/library/ai-tool-grid'
 import { Sparkles } from 'lucide-react'
 
@@ -29,6 +30,18 @@ const itemVariants = {
 }
 
 export default function AILibraryPage() {
+  const { isAdmin, isLoading } = useAdminCheck()
+
+  // ローディング中は何も表示しない
+  if (isLoading) {
+    return null
+  }
+
+  // 管理者でない場合は何も表示しない（useAdminCheckでリダイレクトされる）
+  if (!isAdmin) {
+    return null
+  }
+
   return (
     <motion.div 
       className="flex-1 overflow-hidden"
