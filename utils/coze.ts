@@ -653,6 +653,12 @@ export async function executeCozeQueries(
   onProgress?: (processed: number) => void
 ): Promise<FormattedResponse[]> {
   const results: FormattedResponse[] = [];
+  let processedCount = 0;
+  
+  // 最初のクエリ開始時に進捗を0として通知
+  if (onProgress) {
+    onProgress(0);
+  }
   
   // Split queries into batches
   for (let i = 0; i < subQueries.length; i += BATCH_SIZE) {
@@ -680,18 +686,16 @@ export async function executeCozeQueries(
             .trim();
 
           console.log(`Executing query: ${cleanQuery}`);
-          const requestBody = {
-            parameters: { input: cleanQuery },
-            workflow_id: WORKFLOW_ID
-          };
-
           const response = await fetch(API_URL, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${process.env.NEXT_PUBLIC_COZE_API_KEY}`,
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+              parameters: { input: cleanQuery },
+              workflow_id: WORKFLOW_ID
+            })
           });
 
           if (!response.ok) {
@@ -706,7 +710,12 @@ export async function executeCozeQueries(
             throw new Error(`API error: ${response.statusText}`);
           }
 
-          return await processStreamResponse(response, query, userId, parentQueryId);
+          const result = await processStreamResponse(response, cleanQuery, userId, parentQueryId);
+          processedCount++;
+          if (onProgress) {
+            onProgress(processedCount);
+          }
+          return result;
         } catch (error) {
           const err = error as Error;
           console.error(`Error processing query (attempt ${retries + 1}/${MAX_RETRIES}):`, err);
@@ -740,7 +749,6 @@ export async function executeCozeQueries(
       console.log(`Waiting ${BATCH_DELAY/1000} seconds before processing next batch...`);
       await sleep(BATCH_DELAY);
     }
-    if (onProgress) onProgress(i + batch.length);
   }
 
   return results;

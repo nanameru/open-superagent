@@ -11,6 +11,7 @@ import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
 import ProcessDetails from '@/components/search/process-details';
 import { SourceSidebar } from '@/components/search/source-sidebar';
+import { Analytics } from "@vercel/analytics/react";
 
 // 型定義を追加
 type FetchedData = {
@@ -75,6 +76,8 @@ function SearchContent() {
   const [selectedSources, setSelectedSources] = useState<any[]>([]);
   const [processedQueries, setProcessedQueries] = useState<number>(0);
   const [totalQueries, setTotalQueries] = useState<number>(0);
+  const [visualProgress, setVisualProgress] = useState<number>(0);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
 
   const createNewParentQuery = useCallback(async (searchQuery: string, userId: string | undefined) => {
     setQuery(searchQuery);
@@ -316,18 +319,59 @@ function SearchContent() {
     }
   }, [cozeResults]);
 
-  const updateLanguageCount = (queries: SubQuery[]) => {
-    const languages = new Set<string>();
-    queries.forEach(queryItem => {
-      const lang = queryItem.query_text.match(/lang:(ja|en|zh)/)?.[1];
-      if (lang) languages.add(lang);
-    });
-    setLanguageCount(languages.size);
-  };
-
   useEffect(() => {
+    const updateLanguageCount = (queries: SubQuery[]) => {
+      const languages = new Set<string>();
+      queries.forEach(queryItem => {
+        const lang = queryItem.query_text.match(/lang:(ja|en|zh)/)?.[1];
+        if (lang) languages.add(lang);
+      });
+      setLanguageCount(languages.size);
+    };
+
     updateLanguageCount(subQueries);
   }, [subQueries]);
+
+  useEffect(() => {
+    if (status === 'processing') {
+      setVisualProgress(0);
+      setIsSearching(false);  // 初期状態ではfalse
+      setProcessedQueries(0); // processedQueriesもリセット
+    }
+  }, [status]);
+
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    if (status === 'processing' && isSearching) {  // processedQueries > 0 の条件を削除
+      // 実際の進捗
+      const actualProgress = totalQueries > 0 ? (processedQueries / totalQueries) * 100 : 0;
+      
+      intervalId = setInterval(() => {
+        setVisualProgress(current => {
+          // 実際の進捗より少し先まで進める（最大90%まで）
+          const target = Math.min(actualProgress + 10, 90);
+          if (current < target) {
+            // 1秒で10%進むように設定（100ms間隔で1%進む）
+            return current + 1;
+          }
+          return current;
+        });
+      }, 100);
+    } else if (status !== 'processing') {
+      // 処理が完了したら100%にする
+      if (processedQueries > 0) {  // 処理が実際に行われた場合のみ100%にする
+        setVisualProgress(100);
+      }
+      setIsSearching(false);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [status, processedQueries, totalQueries, isSearching]);
 
   const statusSteps = [
     { key: 'understanding', icon: '💭', label: '理解' },
@@ -395,7 +439,19 @@ function SearchContent() {
 
       // Cozeクエリを実行
       try {
-        const results = await executeCozeQueries(formattedQueries.map(q => q.query_text), userId, parentId);
+        setTotalQueries(formattedQueries.length);  // 総クエリ数を設定
+        setProcessedQueries(0);  // 処理数を0にリセット
+        setIsSearching(true);    // 検索開始状態に設定
+        setVisualProgress(0);    // プログレスバーを0%に設定
+        
+        const results = await executeCozeQueries(
+          formattedQueries.map(q => q.query_text),
+          userId,
+          parentId,
+          (processed) => {
+            setProcessedQueries(processed);  // 処理済みクエリ数を更新
+          }
+        );
         setCozeResults(results);
         
         // ランク付けを実行
@@ -549,7 +605,7 @@ function SearchContent() {
                               <span className="text-sm font-medium text-black">関連する質問を生成中</span>
                             </div>
                             <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] text-[#666666]">
-                              {subQueries.length} 件
+                              {Math.max(0, subQueries.length - 1)} 件
                             </span>
                           </div>
                           <SubQueries 
@@ -594,7 +650,7 @@ function SearchContent() {
                               <div 
                                 className="h-full bg-black transition-all duration-300 rounded-full"
                                 style={{ 
-                                  width: `${totalQueries > 0 ? Math.min((processedQueries / totalQueries) * 100, 100) : 0}%` 
+                                  width: `${visualProgress}%` 
                                 }}
                               />
                             </div>
@@ -679,6 +735,9 @@ function SearchContent() {
             </div>
           )}
         </div>
+      </div>
+      <div className="flex flex-col h-full">
+        <Analytics />
       </div>
     </div>
   );
