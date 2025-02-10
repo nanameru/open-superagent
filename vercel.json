@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "app/search/new/**": {
+      "maxDuration": 60
+    }
+  }
+}
