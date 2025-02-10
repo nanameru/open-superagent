@@ -16,7 +16,7 @@ export const signUpAction = async (formData: FormData) => {
     return encodedRedirect(
       "error",
       "/sign-up",
-      "Username, email and password are required",
+      "ユーザー名、メールアドレス、パスワードは必須項目です",
     );
   }
 
@@ -24,7 +24,7 @@ export const signUpAction = async (formData: FormData) => {
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback`,
+      emailRedirectTo: `https://pitattov3.vercel.app/sign-in`,
       data: {
         username: username,
       }
@@ -53,14 +53,14 @@ export const signUpAction = async (formData: FormData) => {
 
     if (profileError) {
       console.error('Profile creation error:', profileError);
-      return encodedRedirect("error", "/sign-up", "Failed to create user profile");
+      return encodedRedirect("error", "/sign-up", "ユーザープロフィールの作成に失敗しました");
     }
   }
 
   return encodedRedirect(
     "success",
     "/sign-up",
-    "Thanks for signing up! Please check your email for a verification link.",
+    "登録ありがとうございます！確認メールをお送りしましたので、メール内のリンクから登録を完了してください。",
   );
 };
 
