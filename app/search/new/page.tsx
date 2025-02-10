@@ -509,7 +509,7 @@ function SearchContent() {
   }, [parentQueryData?.id, status]);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-[#0A0A0A]">
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* ヘッダー */}
         <div className="flex justify-center mb-12">
@@ -529,8 +529,8 @@ function SearchContent() {
                 )}
               </div>
               <div className="flex items-center gap-4 text-xs flex-shrink-0 ml-4">
-                <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 text-gray-600">
-                  <span className="w-1 h-1 rounded-full bg-gray-900"></span>
+                <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                  <span className="w-1 h-1 rounded-full bg-gray-900 dark:bg-white"></span>
                   {totalPosts}ソース
                 </span>
               </div>
@@ -546,7 +546,7 @@ function SearchContent() {
             <div className="relative mb-8">
               <button
                 onClick={() => setIsProcessExpanded(!isProcessExpanded)}
-                className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-[#EEEEEE] text-sm text-[#444444] hover:bg-black/[0.02] transition-colors"
+                className="w-full flex items-center justify-between p-3 bg-white dark:bg-[#141414] rounded-lg border border-[#EEEEEE] dark:border-gray-800 text-sm text-[#444444] dark:text-gray-200 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
               >
                 <span>プロセスの詳細</span>
                 <svg
@@ -568,19 +568,21 @@ function SearchContent() {
                 <div className="space-y-4">
                   <div className={`transition-all duration-500 ${status === 'understanding' ? 'opacity-100' : 'opacity-60'}`}>
                     <div className="group relative">
-                      <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                      <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] min-h-[72px] flex items-center">
-                        <div className="flex items-center gap-3 w-full">
-                          <div className="relative w-6 h-6 flex items-center justify-center">
-                            {status === 'understanding' || status === 'thinking' || status === 'generating' ? (
-                              <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <svg className="w-3.5 h-3.5 text-[#444444]" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                              </svg>
-                            )}
+                      <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent dark:from-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
+                      <div className="relative bg-white dark:bg-[#141414] rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] dark:border-gray-800 min-h-[72px] flex items-center">
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-3">
+                            <div className="relative w-6 h-6 flex items-center justify-center">
+                              {status === 'understanding' || status === 'thinking' || status === 'generating' ? (
+                                <div className="w-2 h-2 border-2 border-black dark:border-[#3A3A3A] border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <svg className="w-3.5 h-3.5 text-[#444444] dark:text-gray-200" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                                </svg>
+                              )}
+                            </div>
+                            <p className="text-sm text-[#333333] dark:text-[#E0E0E0]">"{query}" の意図を理解しています...</p>
                           </div>
-                          <p className="text-sm text-[#333333]">"{query}" の意図を理解しています...</p>
                         </div>
                       </div>
                     </div>
@@ -588,23 +590,23 @@ function SearchContent() {
 
                   <div className={`transition-all duration-500 ${status === 'thinking' ? 'opacity-100' : status === 'understanding' ? 'opacity-0 translate-y-4' : 'opacity-60'}`}>
                     <div className="group relative">
-                      <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                      <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE]">
+                      <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent dark:from-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
+                      <div className="relative bg-white dark:bg-[#141414] rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] dark:border-gray-800">
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                               <div className="relative w-6 h-6 flex items-center justify-center">
                                 {status === 'thinking' || status === 'generating' ? (
-                                  <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                                  <div className="w-2 h-2 border-2 border-black dark:border-[#3A3A3A] border-t-transparent rounded-full animate-spin"></div>
                                 ) : status === 'completed' ? (
-                                  <svg className="w-3.5 h-3.5 text-[#444444]" fill="currentColor" viewBox="0 0 20 20">
+                                  <svg className="w-3.5 h-3.5 text-[#444444] dark:text-gray-200" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
                                   </svg>
                                 ) : null}
                               </div>
-                              <span className="text-sm font-medium text-black">関連する質問を生成中</span>
+                              <span className="text-sm font-medium text-black dark:text-[#E0E0E0]">関連する質問を生成中</span>
                             </div>
-                            <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] text-[#666666]">
+                            <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] dark:bg-[#1F1F1F] text-[#666666] dark:text-[#A0A0A0]">
                               {Math.max(0, subQueries.length - 1)} 件
                             </span>
                           </div>
@@ -624,31 +626,31 @@ function SearchContent() {
                   {status === 'processing' && (
                     <div className={`transition-all duration-500 ${status === 'processing' ? 'opacity-100' : status === 'thinking' ? 'opacity-0 translate-y-4' : 'opacity-60'}`}>
                       <div className="group relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                        <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] min-h-[72px]">
+                        <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent dark:from-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
+                        <div className="relative bg-white dark:bg-[#141414] rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] dark:border-gray-800 min-h-[72px]">
                           <div className="flex flex-col gap-3 w-full">
                             {/* 上部: 検索状態と総件数 */}
                             <div className="flex items-center justify-between w-full">
                               <div className="flex items-center gap-3">
                                 <div className="relative w-6 h-6 flex items-center justify-center">
-                                  <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                                  <div className="w-2 h-2 border-2 border-black dark:border-[#3A3A3A] border-t-transparent rounded-full animate-spin"></div>
                                 </div>
-                                <span className="text-sm font-medium text-black">Xから検索中...</span>
-                                <span className="text-sm text-gray-500">
+                                <span className="text-sm font-medium text-black dark:text-[#E0E0E0]">Xから検索中...</span>
+                                <span className="text-sm text-gray-500 dark:text-[#808080]">
                                   {processedQueries}/{totalQueries} クエリ完了
                                 </span>
                               </div>
                               {cozeResults && cozeResults.length > 0 && (
-                                <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] text-[#666666]">
+                                <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] dark:bg-[#1F1F1F] text-[#666666] dark:text-[#A0A0A0]">
                                   {totalPosts} 件
                                 </span>
                               )}
                             </div>
                             
                             {/* 下部: プログレスバー */}
-                            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="w-full h-1.5 bg-gray-100 dark:bg-[#1F1F1F] rounded-full overflow-hidden">
                               <div 
-                                className="h-full bg-black transition-all duration-300 rounded-full"
+                                className="h-full bg-black dark:bg-[#3A3A3A] transition-all duration-300 rounded-full"
                                 style={{ 
                                   width: `${visualProgress}%` 
                                 }}
@@ -663,9 +665,9 @@ function SearchContent() {
                                 (result.posts || []).map((post: TwitterPost, postIndex: number) => (
                                   <div 
                                     key={`${resultIndex}-${postIndex}`}
-                                    className="p-3 bg-[#F8F8F8] rounded-lg hover:bg-[#F0F0F0] transition-colors"
+                                    className="p-3 bg-[#F8F8F8] dark:bg-[#1F1F1F] rounded-lg hover:bg-[#F0F0F0] dark:hover:bg-[#2A2A2A] transition-colors"
                                   >
-                                    <p className="text-sm text-[#333333] whitespace-pre-wrap">
+                                    <p className="text-sm text-[#333333] dark:text-[#E0E0E0] whitespace-pre-wrap">
                                       {post.text}
                                     </p>
                                   </div>
@@ -680,22 +682,22 @@ function SearchContent() {
 
                   <div className={`transition-all duration-500 ${status === 'generating' ? 'opacity-100' : status === 'understanding' || status === 'thinking' ? 'opacity-0 translate-y-4' : 'opacity-60'}`}>
                     <div className="group relative">
-                      <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                      <div className="relative bg-white rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] min-h-[72px] flex items-center">
+                      <div className="absolute inset-0 bg-gradient-to-r from-black/[0.02] to-transparent dark:from-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
+                      <div className="relative bg-white dark:bg-[#141414] rounded-xl p-4 backdrop-blur-sm border border-[#EEEEEE] dark:border-gray-800 min-h-[72px] flex items-center">
                         <div className="flex items-center justify-between w-full">
                           <div className="flex items-center gap-3">
                             <div className="relative w-6 h-6 flex items-center justify-center">
                               {status === 'generating' ? (
-                                <div className="w-2 h-2 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                                <div className="w-2 h-2 border-2 border-black dark:border-[#3A3A3A] border-t-transparent rounded-full animate-spin"></div>
                               ) : status === 'completed' ? (
-                                <svg className="w-3.5 h-3.5 text-[#444444]" fill="currentColor" viewBox="0 0 20 20">
+                                <svg className="w-3.5 h-3.5 text-[#444444] dark:text-gray-200" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
                                 </svg>
                               ) : null}
                             </div>
-                            <span className="text-sm font-medium text-black">回答を生成しています</span>
+                            <span className="text-sm font-medium text-black dark:text-[#E0E0E0]">回答を生成しています</span>
                           </div>
-                          <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] text-[#666666]">
+                          <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] dark:bg-[#1F1F1F] text-[#666666] dark:text-[#A0A0A0]">
                             情報を整理中...
                           </span>
                         </div>

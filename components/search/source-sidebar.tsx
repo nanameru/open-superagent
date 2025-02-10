@@ -132,7 +132,7 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm dark:bg-black/60"
             onClick={onClose}
           />
           
@@ -142,18 +142,18 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="absolute right-0 top-0 h-full w-full max-w-md bg-[#FAFAFA] shadow-[0_0_50px_rgba(0,0,0,0.1)]"
+            className="absolute right-0 top-0 h-full w-full max-w-md bg-[#FAFAFA] dark:bg-[#000000] shadow-[0_0_50px_rgba(0,0,0,0.1)]"
           >
             <div className="flex h-full flex-col">
               {/* ヘッダー */}
               <motion.div 
                 variants={headerVariants}
-                className="relative border-b border-gray-100 bg-white px-6 py-5"
+                className="relative border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-[#000000] px-6 py-5"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <motion.div 
-                      className="flex h-10 w-10 items-center justify-center rounded-xl bg-black/90"
+                      className="flex h-10 w-10 items-center justify-center rounded-xl bg-black/90 dark:bg-[#333]"
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
@@ -163,7 +163,7 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                     </motion.div>
                     <div>
                       <motion.h2 
-                        className="text-lg font-medium text-black/90"
+                        className="text-lg font-medium text-black/90 dark:text-white"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.2 }}
@@ -171,7 +171,7 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                         参考文献一覧
                       </motion.h2>
                       <motion.p 
-                        className="text-sm text-black/50"
+                        className="text-sm text-black/50 dark:text-gray-500"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.3 }}
@@ -187,7 +187,7 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.8 }}
                         onClick={handleOpenSelectedSources}
-                        className="flex items-center gap-1.5 rounded-full bg-black/90 px-3 py-1.5 text-sm text-white transition-colors hover:bg-black"
+                        className="flex items-center gap-1.5 rounded-full bg-black/90 dark:bg-[#333] px-3 py-1.5 text-sm text-white transition-colors hover:bg-black dark:hover:bg-[#444]"
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
@@ -199,7 +199,7 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                     )}
                     <motion.button
                       onClick={onClose}
-                      className="rounded-full p-2 text-black/30 transition-colors hover:bg-black/5 hover:text-black/60"
+                      className="rounded-full p-2 text-black/30 dark:text-gray-500 transition-colors hover:bg-black/5 dark:hover:bg-[#333] hover:text-black/60 dark:hover:text-gray-400"
                       whileHover={{ scale: 1.1, rotate: 90 }}
                       whileTap={{ scale: 0.9 }}
                     >
@@ -217,13 +217,13 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="absolute inset-x-0 top-20 z-50 mx-4 rounded-xl bg-white p-4 shadow-lg"
+                  className="absolute inset-x-0 top-20 z-50 mx-4 rounded-xl bg-white dark:bg-[#000000] p-4 shadow-lg"
                 >
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-black/90">選択された文献 ({selectedUrls.length})</h3>
+                    <h3 className="text-sm font-medium text-black/90 dark:text-white">選択された文献 ({selectedUrls.length})</h3>
                     <button
                       onClick={() => setShowUrlList(false)}
-                      className="rounded-full p-1 text-black/30 hover:bg-black/5 hover:text-black/60"
+                      className="rounded-full p-1 text-black/30 dark:text-gray-500 hover:bg-black/5 dark:hover:bg-[#333] hover:text-black/60 dark:hover:text-gray-400"
                     >
                       <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -237,10 +237,10 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block rounded-lg border border-black/5 p-3 text-sm hover:border-black/20 hover:bg-black/5"
+                        className="block rounded-lg border border-black/5 dark:border-gray-800 p-3 text-sm hover:border-black/20 dark:hover:border-gray-700 hover:bg-black/5 dark:hover:bg-[#333]"
                       >
-                        <div className="font-medium text-black/90">{item.title}</div>
-                        <div className="mt-1 text-xs text-black/50 line-clamp-1">{item.url}</div>
+                        <div className="font-medium text-black/90 dark:text-white">{item.title}</div>
+                        <div className="mt-1 text-xs text-black/50 dark:text-gray-500 line-clamp-1">{item.url}</div>
                       </a>
                     ))}
                   </div>
@@ -258,16 +258,16 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                       variants={itemVariants}
                       className={`group p-4 rounded-xl ${
                         selectedSources.has(index) 
-                          ? 'bg-gray-100 ring-1 ring-gray-300 shadow-sm' 
-                          : 'hover:bg-gray-50/80'
+                          ? 'bg-gray-100 dark:bg-[#333] ring-1 ring-gray-300 dark:ring-gray-800 shadow-sm' 
+                          : 'hover:bg-gray-50/80 dark:hover:bg-[#444]'
                       } cursor-pointer transition-all duration-200`}
                       onClick={(e: React.MouseEvent<HTMLDivElement>) => toggleSource(index, e)}
                     >
                       <div className="flex items-start gap-4">
                         <div className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-sm transition-colors duration-200 ${
                           selectedSources.has(index)
-                            ? 'bg-gray-200 text-gray-700 font-medium'
-                            : 'bg-gray-100 text-gray-500'
+                            ? 'bg-gray-200 dark:bg-[#555] text-gray-700 dark:text-white font-medium'
+                            : 'bg-gray-100 dark:bg-[#333] text-gray-500 dark:text-gray-400'
                         }`}>
                           {index + 1}
                         </div>
@@ -276,11 +276,11 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                             <a
                               href={source.url}
                               onClick={(e) => handleSourceClick(source, e)}
-                              className="text-gray-900 hover:text-gray-600 break-words font-medium relative group/link inline-flex items-center gap-2"
+                              className="text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-400 break-words font-medium relative group/link inline-flex items-center gap-2"
                             >
                               <span>{title}</span>
                               <svg className={`w-3.5 h-3.5 transition-colors duration-200 ${
-                                selectedSources.has(index) ? 'text-gray-600' : 'text-gray-400'
+                                selectedSources.has(index) ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400 dark:text-gray-500'
                               }`} viewBox="0 0 20 20" fill="currentColor">
                                 <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
                                 <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
@@ -288,7 +288,7 @@ export const SourceSidebar = ({ sources, isVisible, onClose }: SourceSidebarProp
                             </a>
                           </div>
                           <p className={`text-sm line-clamp-2 leading-relaxed ${
-                            selectedSources.has(index) ? 'text-gray-600' : 'text-gray-500'
+                            selectedSources.has(index) ? 'text-gray-600 dark:text-gray-400' : 'text-gray-500 dark:text-gray-500'
                           }`}>
                             {source.content}
                           </p>

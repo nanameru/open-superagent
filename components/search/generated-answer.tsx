@@ -9,6 +9,7 @@ import { createClient } from '@/utils/supabase/client';
 import ReactMarkdown from 'react-markdown';
 import CopyButton from "@/components/copy-button";
 import CitationButton from "@/components/citation-button";
+import ReferenceButton from "./reference-button";
 
 interface GeneratedAnswerProps {
   isCompleted?: boolean;
@@ -202,107 +203,109 @@ export default function GeneratedAnswer({
             </div>
           )}
 
-          {isGenerating ? (
-            <div className="flex flex-col items-center justify-center py-12 space-y-6">
-              <div className="flex items-center justify-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-black dark:bg-white animate-[bounce_1s_infinite_0ms]"></div>
-                <div className="w-3 h-3 rounded-full bg-black dark:bg-white animate-[bounce_1s_infinite_200ms]"></div>
-                <div className="w-3 h-3 rounded-full bg-black dark:bg-white animate-[bounce_1s_infinite_400ms]"></div>
+          <div className="flex flex-col flex-grow p-8 bg-white dark:bg-[#141414] text-gray-900 dark:text-[#E0E0E0]">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-[#E0E0E0]">回答</h2>
+              <div className="flex items-center space-x-2">
+                <CopyButton text={content} />
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                {currentPhase ? (
-                  <div className="flex items-center gap-2">
-                    <span>{getPhaseText(currentPhase)}</span>
-                    <svg className="animate-spin h-4 w-4 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+            </div>
+            {isGenerating ? (
+              <div className="space-y-4">
+                {currentPhase === 'planning' && (
+                  <div className="flex items-center space-x-2 text-gray-600 dark:text-[#808080]">
+                    <span className="loading loading-dots"></span>
+                    <span>回答を計画中...</span>
                   </div>
-                ) : (
-                  <span>回答を生成中...</span>
+                )}
+                {currentPhase === 'writing' && (
+                  <div className="flex items-center space-x-2 text-gray-600 dark:text-[#808080]">
+                    <span className="loading loading-dots"></span>
+                    <span>回答を生成中...</span>
+                  </div>
+                )}
+                {currentPhase === 'refining' && (
+                  <div className="flex items-center space-x-2 text-gray-600 dark:text-[#808080]">
+                    <span className="loading loading-dots"></span>
+                    <span>回答を改善中...</span>
+                  </div>
+                )}
+                {!currentPhase && (
+                  <div className="flex items-center space-x-2 text-gray-600 dark:text-[#808080]">
+                    <span className="loading loading-dots"></span>
+                    <span>準備中...</span>
+                  </div>
                 )}
               </div>
-            </div>
-          ) : (
-            <div>
-              {content && (
-                <div className="relative group">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">回答</h2>
-                    <div className="absolute -right-2 -top-2">
-                      <CopyButton text={content} />
-                    </div>
-                  </div>
-                  <div className="mt-4 space-y-4">
-                    <div className="prose prose-sm max-w-none dark:prose-invert">
-                      <ReactMarkdown
-                        components={{
-                          h1: ({ children }) => (
-                            <h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>
-                          ),
-                          h2: ({ children }) => (
-                            <h2 className="text-xl font-semibold mt-4 mb-3">{children}</h2>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-bold">{children}</strong>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="list-disc pl-6 my-2">{children}</ul>
-                          ),
-                          li: ({ children }) => (
-                            <li className="my-1">{children}</li>
-                          ),
-                          p: ({ children }) => {
-                            // childrenが配列の場合は文字列に変換
-                            const processChildren = (child: any): string => {
-                              if (typeof child === 'string') return child;
-                              if (Array.isArray(child)) return child.map(processChildren).join('');
-                              // ReactElementの場合は空文字を返す（[object Object]の表示を防ぐ）
-                              return '';
-                            };
+            ) : error ? (
+              <div className="text-red-500 dark:text-red-400">{error}</div>
+            ) : content ? (
+              <div className="prose dark:prose-invert max-w-none">
+                <ReactMarkdown
+                  components={{
+                    h1: ({ children }) => (
+                      <h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="text-xl font-semibold mt-4 mb-3">{children}</h2>
+                    ),
+                    strong: ({ children }) => (
+                      <strong className="font-bold">{children}</strong>
+                    ),
+                    ul: ({ children }) => (
+                      <ul className="list-disc pl-6 my-2">{children}</ul>
+                    ),
+                    li: ({ children }) => (
+                      <li className="my-1">{children}</li>
+                    ),
+                    p: ({ children }) => {
+                      // childrenが配列の場合は文字列に変換
+                      const processChildren = (child: any): string => {
+                        if (typeof child === 'string') return child;
+                        if (Array.isArray(child)) return child.map(processChildren).join('');
+                        // ReactElementの場合は空文字を返す（[object Object]の表示を防ぐ）
+                        return '';
+                      };
 
-                            const text = Array.isArray(children) 
-                              ? children.map(processChildren).join('')
-                              : processChildren(children);
+                      const text = Array.isArray(children) 
+                        ? children.map(processChildren).join('')
+                        : processChildren(children);
 
-                            // 数字のリストのパターンを検出して除外
-                            if (/^\d+(\s+\d+)*$/.test(text.trim())) {
-                              return null;
+                      // 数字のリストのパターンを検出して除外
+                      if (/^\d+(\s+\d+)*$/.test(text.trim())) {
+                        return null;
+                      }
+
+                      // 引用番号のパターン（[数字]）を検出
+                      const parts = text.split(/(\[\d+\])/g);
+                      return (
+                        <p className="my-2">
+                          {parts.map((part, index) => {
+                            const match = part.match(/\[(\d+)\]/);
+                            if (match) {
+                              const citationNumber = parseInt(match[1]);
+                              const url = urlMap.get(citationNumber);
+                              return url ? (
+                                <CitationButton
+                                  key={`inline-citation-${index}`}
+                                  index={citationNumber}
+                                  url={url}
+                                  inline={true}
+                                />
+                              ) : part;
                             }
-
-                            // 引用番号のパターン（[数字]）を検出
-                            const parts = text.split(/(\[\d+\])/g);
-                            return (
-                              <p className="my-2">
-                                {parts.map((part, index) => {
-                                  const match = part.match(/\[(\d+)\]/);
-                                  if (match) {
-                                    const citationNumber = parseInt(match[1]);
-                                    const url = urlMap.get(citationNumber);
-                                    return url ? (
-                                      <CitationButton
-                                        key={`inline-citation-${index}`}
-                                        index={citationNumber}
-                                        url={url}
-                                        inline={true}
-                                      />
-                                    ) : part;
-                                  }
-                                  return part;
-                                })}
-                              </p>
-                            );
-                          }
-                        }}
-                      >
-                        {content}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+                            return part;
+                          })}
+                        </p>
+                      );
+                    }
+                  }}
+                >
+                  {content}
+                </ReactMarkdown>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

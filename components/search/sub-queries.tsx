@@ -59,7 +59,7 @@ export default function SubQueries({ queries, onSelect, isLoading }: SubQueriesP
             <button
               key={index}
               onClick={() => onSelect?.(cleanQuery)}
-              className="group relative w-full px-3 py-2 bg-black/[0.02] hover:bg-black/[0.04] rounded-lg text-sm text-gray-900 transition-all duration-200 text-left backdrop-blur-sm"
+              className="group relative w-full px-3 py-2 bg-black/[0.02] hover:bg-black/[0.04] rounded-lg text-sm text-gray-900 dark:text-gray-100 transition-all duration-200 text-left backdrop-blur-sm"
             >
               <div className="flex items-center gap-1.5">
                 {flagEmoji && (
@@ -69,7 +69,7 @@ export default function SubQueries({ queries, onSelect, isLoading }: SubQueriesP
                 )}
                 <span className="flex-1 text-xs">{displayText}</span>
                 <svg 
-                  className="w-3.5 h-3.5 text-black/20 group-hover:text-black/40 transition-colors" 
+                  className="w-3.5 h-3.5 text-black/20 group-hover:text-black/40 dark:text-white/20 dark:group-hover:text-white/40 transition-colors" 
                   fill="none" 
                   stroke="currentColor" 
                   viewBox="0 0 24 24" 
@@ -83,7 +83,7 @@ export default function SubQueries({ queries, onSelect, isLoading }: SubQueriesP
                   />
                 </svg>
               </div>
-              <div className="absolute inset-0 rounded-lg ring-1 ring-inset ring-black/[0.04] group-hover:ring-black/[0.08] transition-all duration-200" />
+              <div className="absolute inset-0 rounded-lg ring-1 ring-inset ring-black/[0.04] group-hover:ring-black/[0.08] dark:ring-white/[0.04] dark:group-hover:ring-white/[0.08] transition-all duration-200" />
             </button>
           );
         })}

@@ -11,10 +11,10 @@ export default function Logo() {
             alt="Pitatto Logo"
             width={40}
             height={40}
-            className="rounded-xl shadow-lg object-contain group-hover:shadow-xl transition-shadow"
+            className="rounded-xl object-contain dark:invert"
           />
         </div>
-        <span className="font-bold text-2xl text-gradient tracking-tight">
+        <span className="font-bold text-2xl text-gradient tracking-tight dark:text-white">
           Pitatto
         </span>
       </Link>

@@ -23,16 +23,16 @@ export default function NewThread() {
     <>
       <div className="px-4 mt-2">
         <button 
-          className="w-full flex items-center justify-between px-5 py-3 text-sm glassmorphism rounded-xl hover-effect group"
+          className="w-full flex items-center justify-between px-5 py-3 text-sm bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
           onClick={() => setIsDialogOpen(true)}
         >
           <div className="flex items-center space-x-3">
-            <Plus className="w-4 h-4 text-gray-700 group-hover:text-black" />
-            <span className="font-medium">新規スレッド</span>
+            <Plus className="w-4 h-4 text-gray-900 dark:text-white" />
+            <span className="font-medium text-gray-900 dark:text-white">新規スレッド</span>
           </div>
-          <div className="flex items-center space-x-2 px-2 py-1 rounded-lg bg-black/5 group-hover:bg-black/10">
-            <Command className="w-3.5 h-3.5 text-gray-500" />
-            <span className="text-xs font-medium text-gray-500">K</span>
+          <div className="flex items-center space-x-2 px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-700/50">
+            <Command className="w-3.5 h-3.5 text-gray-600 dark:text-white" />
+            <span className="text-xs font-medium text-gray-600 dark:text-white">K</span>
           </div>
         </button>
       </div>
