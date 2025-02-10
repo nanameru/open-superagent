@@ -11,7 +11,7 @@ import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
 import ProcessDetails from '@/components/search/process-details';
 import { SourceSidebar } from '@/components/search/source-sidebar';
-import { Analytics } from "@vercel/analytics/react";
+// import { Analytics } from "@vercel/analytics/react";
 
 // 型定義を追加
 type FetchedData = {
@@ -737,7 +737,7 @@ function SearchContent() {
         </div>
       </div>
       <div className="flex flex-col h-full">
-        <Analytics />
+        {/* <Analytics /> */}
       </div>
     </div>
   );
