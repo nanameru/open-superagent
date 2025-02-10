@@ -10,8 +10,6 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const { theme, setTheme } = useTheme();
-  const [language, setLanguage] = useState('ja');
-  const [autoSuggest, setAutoSuggest] = useState(true);
   const [loading, setLoading] = useState(true);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -181,13 +179,6 @@ export default function SettingsPage() {
               <button className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white font-medium">
                 プロフィール
               </button>
-              <button className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white font-medium">
-                API
-              </button>
-              <button className="inline-flex items-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white font-medium">
-                <span>エンタープライズ</span>
-                <ExternalLink className="ml-1 w-4 h-4" />
-              </button>
             </div>
           </div>
         </div>
@@ -213,47 +204,6 @@ export default function SettingsPage() {
                     システム ({theme === 'light' ? 'ライト' : 'ダーク'})
                   </span>
                 </button>
-              </div>
-            </div>
-
-            {/* Language */}
-            <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-medium text-gray-900 dark:text-white">言語</h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    インターフェースで使用する言語
-                  </p>
-                </div>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="block w-48 pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                >
-                  <option value="en">英語 (English)</option>
-                  <option value="ja">日本語 (Japanese)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Auto-suggest */}
-            <div className="px-6 py-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-medium text-gray-900 dark:text-white">自動提案</h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    入力中のドロップダウンとタブ補完の提案を有効にする
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={autoSuggest}
-                    onChange={(e) => setAutoSuggest(e.target.checked)}
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-gray-600"></div>
-                </label>
               </div>
             </div>
           </div>
@@ -347,26 +297,6 @@ export default function SettingsPage() {
                 ) : (
                   <span className="text-gray-500 dark:text-gray-400">ログインが必要です</span>
                 )}
-              </div>
-            </div>
-
-            {/* AI Data Retention */}
-            <div className="px-6 py-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-medium text-gray-900 dark:text-white">AIデータ保持</h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    AIデータ保持を有効にすると、検索履歴をAIモデルの改善に使用することができます。このプロセスからデータを除外したい場合は、この設定をオフにしてください。
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    defaultChecked
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-gray-600"></div>
-                </label>
               </div>
             </div>
           </div>
