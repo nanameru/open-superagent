@@ -4,8 +4,13 @@ import { useState, useEffect } from 'react'
 import { Home, BookOpen, Library, Users, Settings } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import NavLink from './nav-link'
+import { cn } from '@/lib/utils'
 
-export default function Navigation() {
+interface NavigationProps {
+  isCollapsed?: boolean
+}
+
+export default function Navigation({ isCollapsed }: NavigationProps) {
   const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
@@ -41,9 +46,13 @@ export default function Navigation() {
   const navItems = isAdmin ? [...baseNavItems, ...adminNavItems] : baseNavItems
 
   return (
-    <nav className="mt-8 flex-1 px-4 space-y-2">
+    <nav className={cn(
+      "mt-8 flex-1",
+      isCollapsed ? "px-2" : "px-4",
+      "space-y-2"
+    )}>
       {navItems.map((item) => (
-        <NavLink key={item.href} {...item} />
+        <NavLink key={item.href} {...item} isCollapsed={isCollapsed} />
       ))}
     </nav>
   )

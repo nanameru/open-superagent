@@ -1,10 +1,22 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { cn } from '@/lib/utils'
 
-export default function Logo() {
+interface LogoProps {
+  isCollapsed?: boolean
+}
+
+export default function Logo({ isCollapsed }: LogoProps) {
   return (
-    <div className="p-5">
-      <Link href="/" className="flex items-center space-x-3 group">
+    <div className={cn(
+      isCollapsed ? "p-2 flex justify-center" : "p-5",
+      "transition-all duration-300"
+    )}>
+      <Link href="/" className={cn(
+        "flex items-center",
+        !isCollapsed && "space-x-3",
+        "group"
+      )}>
         <div className="w-10 h-10 flex items-center justify-center">
           <Image
             src="/pitattologo.png"
@@ -14,9 +26,11 @@ export default function Logo() {
             className="rounded-xl object-contain dark:invert"
           />
         </div>
-        <span className="font-bold text-2xl text-gradient tracking-tight dark:text-white">
-          Pitatto
-        </span>
+        {!isCollapsed && (
+          <span className="font-bold text-2xl text-gradient tracking-tight dark:text-white">
+            Pitatto
+          </span>
+        )}
       </Link>
     </div>
   )
