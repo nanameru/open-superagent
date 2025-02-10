@@ -24,7 +24,7 @@ export const signUpAction = async (formData: FormData) => {
     email,
     password,
     options: {
-      emailRedirectTo: `https://pitattov3.vercel.app/sign-in`,
+      emailRedirectTo: `${origin}/auth/callback`,
       data: {
         username: username,
       }
