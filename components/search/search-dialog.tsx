@@ -13,6 +13,7 @@ interface SearchDialogProps {
 
 export default function SearchDialog({ isOpen, onClose, onSubmit }: SearchDialogProps) {
   const [value, setValue] = useState('')
+  const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
 
@@ -49,20 +50,16 @@ export default function SearchDialog({ isOpen, onClose, onSubmit }: SearchDialog
     adjustHeight();
   }, [value]);
 
-  // Command + Enter handler
-  useEffect(() => {
-    if (!isOpen) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault()
-        handleSubmit()
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Shift + Enterの場合は改行を許可
+    if (e.key === 'Enter' && !e.shiftKey) {
+      // 日本語入力中でない場合のみ送信
+      if (!isComposing && value.trim()) {
+        e.preventDefault();
+        handleSubmit();
       }
     }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [value, isOpen])
+  };
 
   if (!isOpen) return null;
 
@@ -97,20 +94,25 @@ export default function SearchDialog({ isOpen, onClose, onSubmit }: SearchDialog
                 ref={textareaRef}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
                 placeholder="メッセージを入力..."
                 rows={1}
-                className="w-full py-[18px] pl-6 pr-16 text-[15px] leading-relaxed bg-white text-gray-900 rounded-xl resize-none outline-none min-h-[64px] max-h-[300px] overflow-y-auto placeholder:text-gray-400 border-0 shadow-[0_2px_8px_rgb(0,0,0,0.06)] transition-all focus:shadow-[0_4px_16px_rgb(0,0,0,0.08)]"
+                className="w-full py-3.5 pl-4 pr-14 text-[15px] bg-gray-100 rounded-xl resize-none outline-none min-h-[52px] max-h-[300px] overflow-y-auto"
                 style={{
-                  height: 'auto',
-                  overflowY: value.split('\n').length > 10 ? 'auto' : 'hidden'
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
                 }}
               />
-              <div className="absolute right-3 bottom-[14px]">
+              <div className="absolute right-3 bottom-2.5">
                 <button 
+                  type="button"
                   onClick={handleSubmit}
-                  className="p-2.5 bg-gray-900 hover:bg-black rounded-xl text-white shadow-sm transition-all hover:shadow-md active:scale-95 hover:-translate-y-0.5 group"
+                  disabled={!value.trim()}
+                  className="p-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:hover:bg-gray-900"
                 >
-                  <ArrowUpIcon className="w-5 h-5 transition-transform group-hover:scale-110" />
+                  <ArrowUpIcon className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -118,5 +120,5 @@ export default function SearchDialog({ isOpen, onClose, onSubmit }: SearchDialog
         </div>
       </div>
     </Portal>
-  )
+  );
 }

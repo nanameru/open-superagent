@@ -203,7 +203,7 @@ export default function GeneratedAnswer({
             </div>
           )}
 
-          <div className="flex flex-col flex-grow p-8 bg-white dark:bg-[#141414] text-gray-900 dark:text-[#E0E0E0]">
+          <div className="flex flex-col flex-grow bg-white dark:bg-[#141414] text-gray-900 dark:text-[#E0E0E0]">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900 dark:text-[#E0E0E0]">回答</h2>
               <div className="flex items-center space-x-2">
@@ -231,9 +231,21 @@ export default function GeneratedAnswer({
                   </div>
                 )}
                 {!currentPhase && (
-                  <div className="flex items-center space-x-2 text-gray-600 dark:text-[#808080]">
-                    <span className="loading loading-dots"></span>
-                    <span>準備中...</span>
+                  <div className="flex flex-col items-center justify-center p-12 space-y-6">
+                    <div className="relative w-20 h-20">
+                      <div className="absolute inset-0 animate-ping rounded-full bg-gray-700 opacity-10"></div>
+                      <div className="absolute inset-0 animate-pulse rounded-full bg-gray-800 opacity-20"></div>
+                      <div className="relative flex items-center justify-center w-20 h-20">
+                        <svg className="w-12 h-12 text-gray-900 dark:text-white animate-spin" viewBox="0 0 24 24">
+                          <path className="opacity-20" fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
+                          <path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2v2a8 8 0 0 1 8 8z"/>
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center space-y-2">
+                      <div className="text-xl font-medium tracking-wider text-gray-900 dark:text-white">生成中</div>
+                      <div className="text-sm font-light tracking-widest uppercase text-gray-500 dark:text-gray-400 animate-pulse">GENERATING RESPONSE</div>
+                    </div>
                   </div>
                 )}
               </div>

@@ -11,7 +11,7 @@ import SubQueries from '@/components/search/sub-queries';
 import GeneratedAnswer from '@/components/search/generated-answer';
 import ProcessDetails from '@/components/search/process-details';
 import { SourceSidebar } from '@/components/search/source-sidebar';
-// import { Analytics } from "@vercel/analytics/react";
+import { Analytics } from "@vercel/analytics/react";
 
 // 型定義を追加
 type FetchedData = {
@@ -52,9 +52,12 @@ function useDebounce<T extends (...args: any[]) => any>(
 
 export default function SearchNewPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <SearchContent />
-    </Suspense>
+    <>
+      <Suspense fallback={<div>Loading...</div>}>
+        <SearchContent />
+      </Suspense>
+      <Analytics />
+    </>
   );
 }
 
@@ -78,6 +81,36 @@ function SearchContent() {
   const [totalQueries, setTotalQueries] = useState<number>(0);
   const [visualProgress, setVisualProgress] = useState<number>(0);
   const [isSearching, setIsSearching] = useState<boolean>(false);
+
+  // URLパラメータの変更を検知して新しい検索を開始
+  useEffect(() => {
+    const searchQuery = searchParams.get('q');
+    if (searchQuery && searchQuery !== query) {
+      // 状態をリセット
+      setSubQueries([]);
+      setCozeResults([]);
+      setAggregatedPosts(new Set());
+      setStatus('understanding');
+      setTotalPosts(0);
+      setProcessedResults(new Set());
+      setShowSidebar(false);
+      setLanguageCount(0);
+      setParentQueryData(null);
+      setDbSubQueries([]);
+      setSelectedSources([]);
+      setProcessedQueries(0);
+      setTotalQueries(0);
+      setVisualProgress(0);
+      setIsProcessExpanded(true);
+      
+      // 新しい検索を開始
+      const supabase = createClient();
+      const userId = supabase.auth.getUser().then(({ data }) => data.user?.id);
+      userId.then(id => {
+        createNewParentQuery(searchQuery, id);
+      });
+    }
+  }, [searchParams]);
 
   const createNewParentQuery = useCallback(async (searchQuery: string, userId: string | undefined) => {
     setQuery(searchQuery);
@@ -529,7 +562,7 @@ function SearchContent() {
                 )}
               </div>
               <div className="flex items-center gap-4 text-xs flex-shrink-0 ml-4">
-                <span className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                <span className="flex items-center gap-2 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                   <span className="w-1 h-1 rounded-full bg-gray-900 dark:bg-white"></span>
                   {totalPosts}ソース
                 </span>
@@ -581,7 +614,9 @@ function SearchContent() {
                                 </svg>
                               )}
                             </div>
-                            <p className="text-sm text-[#333333] dark:text-[#E0E0E0]">"{query}" の意図を理解しています...</p>
+                            <p className="text-sm text-[#333333] dark:text-[#E0E0E0] whitespace-pre-wrap">
+                              {query} の意図を理解しています...
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -656,25 +691,25 @@ function SearchContent() {
                                 }}
                               />
                             </div>
-                          </div>
 
-                          {/* 検索結果の表示 */}
-                          {cozeResults && cozeResults.length > 0 && (
-                            <div className="space-y-3 mt-2">
-                              {cozeResults.flatMap((result, resultIndex) => 
-                                (result.posts || []).map((post: TwitterPost, postIndex: number) => (
-                                  <div 
-                                    key={`${resultIndex}-${postIndex}`}
-                                    className="p-3 bg-[#F8F8F8] dark:bg-[#1F1F1F] rounded-lg hover:bg-[#F0F0F0] dark:hover:bg-[#2A2A2A] transition-colors"
-                                  >
-                                    <p className="text-sm text-[#333333] dark:text-[#E0E0E0] whitespace-pre-wrap">
-                                      {post.text}
-                                    </p>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          )}
+                            {/* 検索結果の表示 */}
+                            {cozeResults && cozeResults.length > 0 && (
+                              <div className="space-y-3 mt-2">
+                                {cozeResults.flatMap((result, resultIndex) => 
+                                  (result.posts || []).map((post: TwitterPost, postIndex: number) => (
+                                    <div 
+                                      key={`${resultIndex}-${postIndex}`}
+                                      className="p-3 bg-[#F8F8F8] dark:bg-[#1F1F1F] rounded-lg hover:bg-[#F0F0F0] dark:hover:bg-[#2A2A2A] transition-colors"
+                                    >
+                                      <p className="text-sm text-[#333333] dark:text-[#E0E0E0] whitespace-pre-wrap">
+                                        {post.text}
+                                      </p>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -698,7 +733,7 @@ function SearchContent() {
                             <span className="text-sm font-medium text-black dark:text-[#E0E0E0]">回答を生成しています</span>
                           </div>
                           <span className="text-xs px-2 py-1 rounded-md bg-[#F8F8F8] dark:bg-[#1F1F1F] text-[#666666] dark:text-[#A0A0A0]">
-                            情報を整理中...
+                            回答を生成中...
                           </span>
                         </div>
                       </div>
@@ -739,7 +774,7 @@ function SearchContent() {
         </div>
       </div>
       <div className="flex flex-col h-full">
-        {/* <Analytics /> */}
+        <Analytics />
       </div>
     </div>
   );

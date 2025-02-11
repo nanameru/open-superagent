@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowUpIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface SearchTextareaProps {
   value: string;
@@ -11,6 +11,7 @@ interface SearchTextareaProps {
 
 export default function SearchTextarea({ value, onChange, onSubmit }: SearchTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isComposing, setIsComposing] = useState(false);
 
   // テキストエリアの高さを自動調整する関数
   const adjustHeight = () => {
@@ -32,6 +33,17 @@ export default function SearchTextarea({ value, onChange, onSubmit }: SearchText
     onChange(newValue);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Shift + Enterの場合は改行を許可
+    if (e.key === 'Enter' && !e.shiftKey) {
+      // 日本語入力中でない場合のみ送信
+      if (!isComposing && onSubmit && value.trim()) {
+        e.preventDefault();
+        onSubmit();
+      }
+    }
+  };
+
   return (
     <div>
       <div className="relative flex items-end">
@@ -39,6 +51,9 @@ export default function SearchTextarea({ value, onChange, onSubmit }: SearchText
           ref={textareaRef}
           value={value}
           onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
           placeholder="AIアシスタントにメッセージを送信"
           rows={1}
           className="w-full py-3.5 pl-4 pr-14 text-base text-gray-900 dark:text-gray-100 bg-transparent rounded-xl resize-none outline-none min-h-[52px] max-h-[300px] overflow-y-auto placeholder:text-gray-400 dark:placeholder:text-gray-500"
@@ -51,6 +66,7 @@ export default function SearchTextarea({ value, onChange, onSubmit }: SearchText
           <button 
             type="button"
             onClick={onSubmit}
+            disabled={!value.trim()}
             className="p-2 bg-black dark:bg-white text-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:hover:bg-black dark:disabled:hover:bg-white relative"
           >
             <ArrowUpIcon className="w-4 h-4" />
