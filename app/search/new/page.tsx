@@ -12,6 +12,7 @@ import GeneratedAnswer from '@/components/search/generated-answer';
 import ProcessDetails from '@/components/search/process-details';
 import { SourceSidebar } from '@/components/search/source-sidebar';
 import { Analytics } from "@vercel/analytics/react";
+import FooterInput from '@/components/search/footer-input';
 
 // 型定義を追加
 type FetchedData = {
@@ -312,7 +313,7 @@ function SearchContent() {
       const supabase = createClient();
       const { count, error } = await supabase
         .from('fetched_data')
-        .select('*', { count: 'exact', head: true })
+        .select('*', { count: 'exact', head: true})
         .eq('query_id', parentQueryData.id);
 
       if (error) {
@@ -774,6 +775,11 @@ function SearchContent() {
         </div>
       </div>
       <div className="flex flex-col h-full">
+        <div className="fixed bottom-0 left-[320px] right-0 py-6 bg-gradient-to-t from-white via-white to-transparent dark:from-[#0A0A0A] dark:via-[#0A0A0A] dark:to-transparent">
+          <div className="max-w-3xl mx-auto px-6">
+            <FooterInput />
+          </div>
+        </div>
         <Analytics />
       </div>
     </div>

@@ -4,6 +4,7 @@ import { ArrowUpIcon } from 'lucide-react'
 import Portal from '@/components/ui/portal'
 import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
 
 interface SearchDialogProps {
   isOpen: boolean;
@@ -14,11 +15,37 @@ interface SearchDialogProps {
 export default function SearchDialog({ isOpen, onClose, onSubmit }: SearchDialogProps) {
   const [value, setValue] = useState('')
   const [isComposing, setIsComposing] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
 
+  // ログイン状態を確認
+  useEffect(() => {
+    const supabase = createClient();
+    
+    // 初期ログイン状態の確認
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session);
+    });
+
+    // ログイン状態の変更を監視
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   const handleSubmit = () => {
     if (!value.trim()) return
+    
+    if (!isLoggedIn) {
+      router.push('/sign-in')
+      onClose()
+      return
+    }
     
     // エンコードされたクエリパラメーターを作成
     const encodedQuery = encodeURIComponent(value.trim())
@@ -97,7 +124,7 @@ export default function SearchDialog({ isOpen, onClose, onSubmit }: SearchDialog
                 onKeyDown={handleKeyDown}
                 onCompositionStart={() => setIsComposing(true)}
                 onCompositionEnd={() => setIsComposing(false)}
-                placeholder="メッセージを入力..."
+                placeholder={isLoggedIn ? "メッセージを入力..." : "ログインしてメッセージを送信"}
                 rows={1}
                 className="w-full py-3.5 pl-4 pr-14 text-[15px] bg-gray-100 rounded-xl resize-none outline-none min-h-[52px] max-h-[300px] overflow-y-auto"
                 style={{
@@ -109,10 +136,17 @@ export default function SearchDialog({ isOpen, onClose, onSubmit }: SearchDialog
                 <button 
                   type="button"
                   onClick={handleSubmit}
-                  disabled={!value.trim()}
-                  className="p-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:hover:bg-gray-900"
+                  disabled={!value.trim() || !isLoggedIn}
+                  className="p-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:hover:bg-gray-900 relative group"
                 >
                   <ArrowUpIcon className="w-4 h-4" />
+                  {!isLoggedIn && value.trim() && (
+                    <div className="absolute bottom-full right-0 mb-2 w-max opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                        ログインが必要です
+                      </div>
+                    </div>
+                  )}
                 </button>
               </div>
             </div>

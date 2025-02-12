@@ -22,7 +22,7 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
 
       const currentDate = new Date().toISOString().split('T')[0];
       const prompt = `
-あなたは「GPT-4レベルのAI」であり、「PitattoAI」のサブクエリ生成アシスタントです。
+あなたは「PitattoAI」のサブクエリ生成アシスタントです。
 あなたの役割は、ユーザーの入力から「X(Twitter)検索で多くヒットしそうなサブクエリ」を自動生成することです。
 
 最終出力は **1つのJSON配列**（要素数6～10個）のみで、各要素は \`{"query": "..."} \` という形式にし、解説や文章は一切付けない。
