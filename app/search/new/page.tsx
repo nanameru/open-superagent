@@ -157,20 +157,36 @@ function SearchContent() {
       let queryToUse = existingQuery;
 
       if (!existingQuery) {
-        const { data: newQuery, error: insertError } = await supabase
+        const { data: newQuery, error: queryError } = await supabase
           .from('queries')
-          .insert({
-            user_id: userId,
-            query_text: searchQuery,
-            query_type: QueryType.USER,
-            created_at: new Date().toISOString()
-          })
+          .insert([
+            {
+              user_id: userId,
+              query_text: searchQuery,
+              query_type: QueryType.USER,
+              conversation_query_id: parentQueryData ? [parentQueryData.id] : [] // 親クエリがある場合は配列に追加
+            }
+          ])
           .select()
           .single();
 
-        if (insertError) {
-          console.error('Error creating new query:', insertError);
+        if (queryError) {
+          console.error('Error creating query:', queryError);
           return;
+        }
+
+        // 作成したクエリのIDを使って conversation_query_id を更新
+        const { error: updateError } = await supabase
+          .from('queries')
+          .update({ 
+            conversation_query_id: newQuery.conversation_query_id 
+              ? [...newQuery.conversation_query_id, newQuery.id]
+              : [newQuery.id]
+          })
+          .eq('id', newQuery.id);
+
+        if (updateError) {
+          console.error('Error updating conversation_query_id:', updateError);
         }
 
         queryToUse = newQuery;
@@ -544,7 +560,7 @@ function SearchContent() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#0A0A0A]">
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8 pb-[160px]">
         {/* ヘッダー */}
         <div className="flex justify-center mb-12">
           <div className="w-[75%]">
@@ -573,7 +589,7 @@ function SearchContent() {
         </div>
 
         {/* メインコンテンツを横並びに */}
-        <div className={`flex gap-8 ${!showSidebar ? 'justify-center' : ''}`}>
+        <div className="flex justify-center mb-12">
           {/* 左カラム: プロセスの詳細 */}
           <div className="w-[75%] transition-all duration-300">
             {/* プロセスの詳細セクション */}
@@ -754,33 +770,31 @@ function SearchContent() {
             />
           </div>
 
-          {/* 右カラム: ソースサイドバー */}
-          {showSidebar && (
-            <div className="w-[25%] relative">
-              <div className="sticky top-8">
-                <SourceSidebar
-                  sources={selectedSources.map(rag => ({
-                    title: rag.fetched_data?.source_title || '',
-                    url: rag.fetched_data?.source_url || '',
-                    content: rag.fetched_data?.content || '',
-                    score: rag.score,
-                    rank: rag.rank
-                  }))}
-                  isVisible={showSidebar}
-                  onClose={() => setShowSidebar(false)}
-                />
+          {/* フッター */}
+          <div className="fixed bottom-0 left-[280px] right-0 pt-6 pb-[60px] bg-gradient-to-t from-white via-white to-transparent dark:from-[#0A0A0A] dark:via-[#0A0A0A] dark:to-transparent">
+            <div className="flex justify-center">
+              <div className="w-[75%] max-w-3xl">
+                <FooterInput />
               </div>
             </div>
+          </div>
+          <Analytics />
+
+          {/* ソースサイドバー（ルートレベルに移動） */}
+          {showSidebar && (
+            <SourceSidebar
+              sources={selectedSources.map(rag => ({
+                title: rag.fetched_data?.source_title || '',
+                url: rag.fetched_data?.source_url || '',
+                content: rag.fetched_data?.content || '',
+                score: rag.score,
+                rank: rag.rank
+              }))}
+              isVisible={showSidebar}
+              onClose={() => setShowSidebar(false)}
+            />
           )}
         </div>
-      </div>
-      <div className="flex flex-col h-full">
-        <div className="fixed bottom-0 left-[320px] right-0 py-6 bg-gradient-to-t from-white via-white to-transparent dark:from-[#0A0A0A] dark:via-[#0A0A0A] dark:to-transparent">
-          <div className="max-w-3xl mx-auto px-6">
-            <FooterInput />
-          </div>
-        </div>
-        <Analytics />
       </div>
     </div>
   );

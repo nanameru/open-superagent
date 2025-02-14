@@ -1,21 +1,114 @@
 'use client';
 
-import { Search, ArrowRight, Command } from 'lucide-react';
+import { ArrowUpIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createClient } from '@/utils/supabase/client';
 
-export default function FooterInput() {
+interface FooterInputProps {
+  currentQueryId?: string;
+}
+
+export default function FooterInput({ currentQueryId }: FooterInputProps) {
   const [value, setValue] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // ログイン状態を確認
+  useEffect(() => {
+    const supabase = createClient();
+    
+    // 初期ログイン状態の確認
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session);
+    });
+
+    // ログイン状態の変更を監視
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // テキストエリアの高さを自動調整する関数
+  const adjustHeight = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      const newHeight = Math.min(textarea.scrollHeight, 300); // 最大300px
+      textarea.style.height = `${newHeight}px`;
+    }
+  };
+
+  // 値が変更されたときに高さを調整
+  useEffect(() => {
+    adjustHeight();
+  }, [value]);
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!value.trim()) return;
     
-    const encodedQuery = encodeURIComponent(value.trim());
-    router.push(`/search/new?q=${encodedQuery}`);
-    setValue('');
+    if (!isLoggedIn) {
+      router.push('/sign-in');
+      return;
+    }
+
+    const supabase = createClient();
+    const user = await supabase.auth.getUser();
+    const userId = user.data.user?.id;
+
+    if (!userId) {
+      console.error('User not found');
+      return;
+    }
+
+    try {
+      // 新しいクエリを作成
+      const { data: newQuery, error: queryError } = await supabase
+        .from('queries')
+        .insert([
+          {
+            query_text: value.trim(),
+            user_id: userId,
+            conversation_query_id: currentQueryId ? [currentQueryId] : [] // 配列型として設定
+          }
+        ])
+        .select()
+        .single();
+
+      if (queryError) {
+        throw queryError;
+      }
+
+      // 検索ページに遷移
+      const encodedQuery = encodeURIComponent(value.trim());
+      router.push(`/search/new?q=${encodedQuery}`);
+      setValue('');
+    } catch (error) {
+      console.error('Error creating query:', error);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Shift + Enterの場合は改行を許可
+    if (e.key === 'Enter' && !e.shiftKey) {
+      // 日本語入力中でない場合のみ送信
+      if (!isComposing && value.trim()) {
+        if (!isLoggedIn) {
+          e.preventDefault();
+          router.push('/sign-in');
+          return;
+        }
+        e.preventDefault();
+        handleSubmit();
+      }
+    }
   };
 
   // Command + Kでフォーカス
@@ -23,8 +116,7 @@ export default function FooterInput() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        const input = document.querySelector<HTMLInputElement>('#footer-search-input');
-        input?.focus();
+        textareaRef.current?.focus();
       }
     };
 
@@ -33,42 +125,42 @@ export default function FooterInput() {
   }, []);
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="relative" style={{ zIndex: 40 }}>
       <div className="relative group">
         <div 
-          className={`relative bg-white/80 dark:bg-black/80 backdrop-blur-xl rounded-2xl border ${
-            isFocused 
-              ? 'border-gray-400 dark:border-gray-500 shadow-lg ring-1 ring-gray-200 dark:ring-gray-800' 
-              : 'border-gray-200 dark:border-gray-800 shadow-md'
-          } transition-all duration-200 ease-in-out transform ${
-            isFocused ? 'scale-[1.01]' : 'hover:scale-[1.005]'
-          }`}
+          className="relative bg-white/80 dark:bg-black/80 backdrop-blur-xl rounded-2xl border border-gray-200 dark:border-gray-800 shadow-md transition-all duration-200 ease-in-out"
         >
-          <div className="flex items-center">
-            <div className="pl-4">
-              <Search className={`w-5 h-5 transition-colors duration-200 ${
-                isFocused ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400'
-              }`} />
-            </div>
-            <input
-              id="footer-search-input"
-              type="text"
+          <div className="flex items-end">
+            <textarea
+              ref={textareaRef}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              placeholder="Ask follow-up"
-              className="w-full py-4 pl-3 pr-32 text-base bg-transparent outline-none text-gray-900 dark:text-white placeholder:text-gray-400"
+              onKeyDown={handleKeyDown}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
+              placeholder={isLoggedIn ? "追加でPitattoに質問をする" : "ログインしてメッセージを送信"}
+              rows={1}
+              className="w-full py-3.5 pl-4 pr-14 text-base text-gray-900 dark:text-gray-100 bg-transparent rounded-xl resize-none outline-none min-h-[52px] max-h-[300px] overflow-y-auto placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              style={{
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
             />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-3">
-              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-gray-100/80 dark:bg-gray-800/80 backdrop-blur-sm">
-                <Command className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">K</span>
-              </div>
-              <div className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-lg bg-black dark:bg-white group-hover:pr-3 transition-all">
-                <span className="text-xs font-semibold text-white dark:text-black">Pro</span>
-                <ArrowRight className="w-3.5 h-3.5 text-white dark:text-black transform group-hover:translate-x-0.5 transition-transform" />
-              </div>
+            <div className="absolute right-3 bottom-2.5">
+              <button 
+                type="submit"
+                disabled={!value.trim() || !isLoggedIn}
+                className="p-2 bg-black dark:bg-white text-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:hover:bg-black dark:disabled:hover:bg-white relative group"
+              >
+                <ArrowUpIcon className="w-4 h-4" />
+                {!isLoggedIn && value.trim() && (
+                  <div className="absolute bottom-full right-0 mb-2 w-max opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                      ログインが必要です
+                    </div>
+                  </div>
+                )}
+              </button>
             </div>
           </div>
         </div>

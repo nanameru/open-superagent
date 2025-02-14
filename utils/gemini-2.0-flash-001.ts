@@ -32,8 +32,8 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
    - ユーザー入力に言語指定がある場合、その言語**のみ**のクエリを作る。  
    - **言語指定がない場合**は下記の割合でクエリを作成（合計6～10個）。  
      - 日本語 (lang:ja): 40% → min_faves:100  
-     - 英語 (lang:en): 30% → min_faves:500  
-     - 中国語 (lang:zh): 30% → min_faves:300  
+     - 英語 (lang:en): 30% → min_faves:250  
+     - 中国語 (lang:zh): 30% → min_faves:100
 
 2. **キーワードの言語変換・選択**  
    - **必ずクエリのlangに合わせた言語表記のキーワードを使う**。  
@@ -41,13 +41,20 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
      - lang:enの場合: 英語表現だけ  
      - lang:jaの場合: 日本語表現だけ  
      - lang:zhの場合: 中国語表現だけ  
+     - ただし、英語の固有名詞（例：「Goku AI」「ChatGPT」など）がユーザー入力に含まれる場合は、そのままの表記を使用し、他言語に翻訳しない。
 
 3. **min_favesの設定**  
    - lang:ja → min_faves:100  
-   - lang:en → min_faves:500  
-   - lang:zh → min_faves:300  
+   - lang:en → min_faves:250  
+   - lang:zh → min_faves:100
 
-4. **クエリ形式**  
+4. **日付指定の扱い**  
+   - ユーザーの入力に「最新の～」「最近の～」といった曖昧な期間指定がある場合、直近1週間（例：since:YYYY-MM-DD until:YYYY-MM-DD）を付与する。  
+   - ユーザーが具体的な年月日や「2024年9月」「2023/09」などの期間を指定した場合、その指定に従い、since:YYYY-MM-DD until:YYYY-MM-DD の形式で期間を設定する。  
+   - 「1日前のAI情報を教えて」や「10月中のAI情報を教えて」のようなユーザーの入力があった場合には、その指定に沿って、since:YYYY-MM-DD until:YYYY-MM-DD の形式で期間を設定する。 
+   - ユーザーが月のみを指定し、その月が現在の月より未来の場合は、直前の年のその月として解釈する。（例：現在が2025年3月で「9月の情報」と指定された場合、2024年9月として扱う）
+
+5. **クエリ形式**  
    \`"<キーワード(1～2語)> [追加語] min_faves:X lang:xx [since:YYYY-MM-DD until:YYYY-MM-DD]"\`
 
 以下のクエリから、X(Twitter)検索用のサブクエリを生成してください：
@@ -56,18 +63,19 @@ export async function generateSubQueries(userQuery: string): Promise<string[]> {
 <<CURRENT_DATE>> = ${currentDate}
 
 【手順】
-1. キーワード抽出（1～2語）
-   - 検索意図を示す主要キーワードを1～2語に短縮
+1. キーワード抽出（1語）
+   - 検索意図を示す主要キーワードを1語に短縮
    - なるべく多くの投稿がヒットしそうな広義かつ一般的な単語を選択
 
 2. 期間指定
    - 「最新の～」「最近の～」→ 1週間分の期間指定を追加
    - 具体的な日付指定があれば適宜since/untilを追加
+   - ユーザーが具体的な日付・年月を指定した場合は、その指定に従いsince:YYYY-MM-DD until:YYYY-MM-DDを設定
 
 3. 最終出力形式
    [
-     {"query": "AI development min_faves:500 lang:en"},
-     {"query": "ChatGPT min_faves:500 lang:en since:2025-01-26 until:2025-02-02"},
+     {"query": "AI development min_faves:250 lang:en"},
+     {"query": "ChatGPT min_faves:100 lang:ja since:2025-01-26 until:2025-02-02"},
      ...
    ]`;
 
