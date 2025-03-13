@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepResearch</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- サイドバー -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <h2>DeepResearch</h2>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>今日</h3>
+                <ul class="sidebar-menu">
+                    <li class="active"><i class="fas fa-search"></i> AI検索</li>
+                    <li><i class="fas fa-chart-line"></i> 統計</li>
+                    <li><i class="fas fa-history"></i> 履歴</li>
+                </ul>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>設定</h3>
+                <ul class="sidebar-menu">
+                    <li><i class="fas fa-cog"></i> 環境設定</li>
+                    <li><i class="fas fa-key"></i> API設定</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- メインコンテンツ -->
+        <div class="main-content">
+            <div class="chat-container">
+                <!-- チャットヘッダー -->
+                <div class="chat-header">
+                    <div class="chat-title">
+                        <h1>DeepResearch</h1>
+                        <div class="model-selector">
+                            <span>o3-mini</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    <div class="chat-actions">
+                        <button class="share-button"><i class="fas fa-share-alt"></i> 共有する</button>
+                    </div>
+                </div>
+                
+                <!-- チャットメッセージエリア -->
+                <div class="chat-messages" id="report-content">
+                    <!-- レポートがここに表示されます -->
+                    <div class="welcome-message">
+                        <h2>DeepResearchへようこそ</h2>
+                        <p>検索クエリを入力して、AIによる深層検索を開始してください。</p>
+                        <p>例: 「AIの教育への応用」「気候変動対策の最新技術」など</p>
+                    </div>
+                </div>
+                
+                <!-- 入力エリア -->
+                <div class="chat-input-container">
+                    <div class="input-wrapper">
+                        <input type="text" id="search-query" placeholder="検索クエリを入力...">
+                        <div class="input-options">
+                            <div class="option-group">
+                                <label for="max-iterations">反復回数:</label>
+                                <select id="max-iterations">
+                                    <option value="3">3</option>
+                                    <option value="5">5</option>
+                                    <option value="10" selected>10</option>
+                                    <option value="15">15</option>
+                                </select>
+                            </div>
+                            <div class="option-group">
+                                <label for="report-style">スタイル:</label>
+                                <select id="report-style">
+                                    <option value="academic" selected>学術的</option>
+                                    <option value="business">ビジネス</option>
+                                    <option value="casual">カジュアル</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button id="search-button"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右サイドバー（ログ表示用） -->
+        <div class="right-sidebar">
+            <div class="sidebar-header">
+                <h3>アクティビティ</h3>
+                <button class="close-sidebar"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="sidebar-content">
+                <div class="status-bar">
+                    <span id="search-status">準備完了</span>
+                    <div class="spinner" id="spinner"></div>
+                </div>
+                <div class="result-stats">
+                    <span id="result-length">最終結果の長さ: 0 文字</span>
+                </div>
+                <div class="log-container">
+                    <div id="logs-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
