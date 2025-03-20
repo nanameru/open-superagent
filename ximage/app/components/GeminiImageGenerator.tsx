@@ -306,7 +306,7 @@ export default function GeminiImageGenerator({
     // 画像生成開始のトラッキング
     track('avatar_generation_process', { 
       action: 'started',
-      twitterId 
+      twitterId: twitterId || 'anonymous' 
     });
 
     try {
@@ -337,7 +337,7 @@ export default function GeminiImageGenerator({
         track('avatar_generation_process', { 
           action: 'error',
           errorType: errorData.error || 'unknown_error',
-          twitterId
+          twitterId: twitterId || 'anonymous'
         });
         
         setLoading(false);
@@ -353,7 +353,7 @@ export default function GeminiImageGenerator({
       // 生成成功時のトラッキング
       track('avatar_generation_process', { 
         action: 'success',
-        twitterId
+        twitterId: twitterId || 'anonymous'
       });
       
     } catch (err) {
@@ -364,7 +364,7 @@ export default function GeminiImageGenerator({
       track('avatar_generation_process', { 
         action: 'exception',
         errorMessage: err instanceof Error ? err.message : 'unknown error',
-        twitterId
+        twitterId: twitterId || 'anonymous'
       });
     } finally {
       setLoading(false);
@@ -421,7 +421,7 @@ https://pixel-me.vercel.app`);
   const handleShareButtonClick = () => {
     track('share_button_clicked', { 
       platform: 'X',
-      twitterId
+      twitterId: twitterId || 'anonymous'
     });
   };
   
@@ -430,7 +430,7 @@ https://pixel-me.vercel.app`);
     track('image_download', { 
       type: 'single_image',
       imageNumber,
-      twitterId
+      twitterId: twitterId || 'anonymous'
     });
     
     const link = document.createElement('a');
@@ -442,7 +442,7 @@ https://pixel-me.vercel.app`);
   // 動画保存ボタンのクリックトラッキング
   const handleVideoDownload = () => {
     if (videoBlob) {
-      track('video_download', { twitterId });
+      track('video_download', { twitterId: twitterId || 'anonymous' });
       
       const url = URL.createObjectURL(videoBlob);
       const a = document.createElement('a');

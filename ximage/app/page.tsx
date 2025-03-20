@@ -19,7 +19,7 @@ export default function Home() {
     }
     
     // ユーザーがアバター生成を開始したことをトラッキング
-    track('generate_avatar_started', { twitterId });
+    track('generate_avatar_started', { twitterId: twitterId || 'anonymous' });
     
     setError('');
     setSubmittedId(twitterId);
