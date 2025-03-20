@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { GeminiImageResponse, CharacterStats } from '../lib/api/gemini';
+import { track } from '@vercel/analytics';
 
 interface GeminiImageGeneratorProps {
   twitterId?: string;
@@ -295,35 +296,30 @@ export default function GeminiImageGenerator({
     };
   }, [imageData, currentImage, countdown, isRecording]);
   
-  // 画像生成処理
+  // 画像生成ロジック
   const generateImages = async () => {
-    if (!twitterId && (!tweetContent || tweetContent.length === 0)) {
-      setError('TwitterIDまたはツイート内容が必要です');
-      onError?.('TwitterIDまたはツイート内容が必要です');
-      return;
-    }
-    
-    // すでにロード中の場合は重複リクエストを防止
-    if (loading) {
-      console.log('Already loading images, skipping duplicate request');
-      return;
-    }
-    
+    // ログを追加
+    console.log('Starting image generation process...');
     setLoading(true);
-    setError(null);
+    setError('');
     
+    // 画像生成開始のトラッキング
+    track('avatar_generation_process', { 
+      action: 'started',
+      twitterId 
+    });
+
     try {
-      console.log('Generating avatar for Twitter ID:', twitterId);
-      
-      // 一意のリクエストIDを生成
       const requestId = Date.now().toString();
+      // 既に生成されたことがあるかチェック
+      if (!localStorage.getItem(`pixelme-${twitterId}`)) {
+        localStorage.setItem(`pixelme-${twitterId}`, requestId);
+      }
       
-      // APIエンドポイントを呼び出して画像を生成
       const response = await fetch('/api/generate-avatar', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Request-ID': requestId,
         },
         body: JSON.stringify({
           twitterId,
@@ -332,36 +328,44 @@ export default function GeminiImageGenerator({
         }),
       });
       
-      console.log('API response status:', response.status);
-      
       if (!response.ok) {
-        throw new Error(`API error: ${response.statusText}`);
+        const errorData = await response.json();
+        console.error('API error response:', errorData);
+        setError(`アバターの生成に失敗しました: ${errorData.error || '不明なエラー'}`);
+        
+        // エラー発生時のトラッキング
+        track('avatar_generation_process', { 
+          action: 'error',
+          errorType: errorData.error || 'unknown_error',
+          twitterId
+        });
+        
+        setLoading(false);
+        return;
       }
       
-      const data: GeminiImageResponse = await response.json();
-      console.log('API response received, has image1:', !!data.image1, 'has image2:', !!data.image2, 'has stats:', !!data.stats);
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      
-      if (!data.image1 || !data.image2) {
-        console.error('Images missing from response:', data);
-        throw new Error('画像の生成に失敗しました');
-      }
+      const data = await response.json();
+      console.log('Image generation successful!');
       
       setImageData(data);
-      onComplete?.(data);
+      setCurrentImage(0);
       
-      // ステータスがある場合は表示
-      if (data.stats) {
-        setShowStats(true);
-      }
+      // 生成成功時のトラッキング
+      track('avatar_generation_process', { 
+        action: 'success',
+        twitterId
+      });
+      
     } catch (err) {
       console.error('Error generating images:', err);
-      const errorMessage = err instanceof Error ? err.message : '画像生成中にエラーが発生しました';
-      setError(errorMessage);
-      onError?.(errorMessage);
+      setError('アバター生成中にエラーが発生しました。ネットワーク接続を確認して再試行してください。');
+      
+      // 例外発生時のトラッキング
+      track('avatar_generation_process', { 
+        action: 'exception',
+        errorMessage: err instanceof Error ? err.message : 'unknown error',
+        twitterId
+      });
     } finally {
       setLoading(false);
     }
@@ -411,6 +415,41 @@ https://pixel-me.vercel.app`);
     const hashtags = encodeURIComponent('AI,ピクセルアート,レトロゲーム');
     
     return `${baseUrl}?text=${text}&hashtags=${hashtags}`;
+  };
+  
+  // X共有ボタンのクリックトラッキング
+  const handleShareButtonClick = () => {
+    track('share_button_clicked', { 
+      platform: 'X',
+      twitterId
+    });
+  };
+  
+  // 画像保存ボタンのクリックトラッキング
+  const handleImageDownload = (imageNumber: number) => {
+    track('image_download', { 
+      type: 'single_image',
+      imageNumber,
+      twitterId
+    });
+    
+    const link = document.createElement('a');
+    link.href = `data:image/png;base64,${imageNumber === 0 ? imageData?.image1 : imageData?.image2}`;
+    link.download = `pixel-avatar-${imageNumber + 1}.png`;
+    link.click();
+  };
+  
+  // 動画保存ボタンのクリックトラッキング
+  const handleVideoDownload = () => {
+    if (videoBlob) {
+      track('video_download', { twitterId });
+      
+      const url = URL.createObjectURL(videoBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pixel-avatar-animation.mp4`;
+      a.click();
+    }
   };
   
   return (
@@ -651,12 +690,7 @@ https://pixel-me.vercel.app`);
             {/* ダウンロードとシェアボタン */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
-                onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = `data:image/png;base64,${currentImage === 0 ? imageData.image1 : imageData.image2}`;
-                  link.download = `pixel-avatar-${currentImage + 1}.png`;
-                  link.click();
-                }}
+                onClick={() => handleImageDownload(currentImage)}
                 className="bg-secondary text-white rounded-md px-4 py-2 transition-all hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary pixel-border pixel-font flex items-center justify-center"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-4 h-4 mr-2">
@@ -669,6 +703,7 @@ https://pixel-me.vercel.app`);
                 href={generateTwitterShareUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={handleShareButtonClick}
                 className="bg-[#1DA1F2] text-white rounded-md px-4 py-2 transition-all hover:bg-[#1a94df] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1DA1F2] pixel-border pixel-font flex items-center justify-center"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="w-4 h-4 mr-2" viewBox="0 0 16 16">

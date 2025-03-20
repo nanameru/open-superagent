@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import GeminiImageGenerator from './components/GeminiImageGenerator';
+import { track } from '@vercel/analytics';
 
 export default function Home() {
   const [twitterId, setTwitterId] = useState('');
@@ -17,8 +18,19 @@ export default function Home() {
       return;
     }
     
+    // ユーザーがアバター生成を開始したことをトラッキング
+    track('generate_avatar_started', { twitterId });
+    
     setError('');
     setSubmittedId(twitterId);
+  };
+
+  // コミュニティへの遷移をトラッキングする関数
+  const handleCommunityClick = () => {
+    track('community_button_clicked', { 
+      destination: 'ai-porseo',
+      from: 'result_page'
+    });
   };
 
   return (
@@ -133,6 +145,7 @@ export default function Home() {
                     href="https://www.ai-porseo.com/play-with-ai" 
                     target="_blank" 
                     rel="noopener noreferrer"
+                    onClick={handleCommunityClick}
                     className="block w-full bg-primary hover:bg-primary-hover text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all text-center pixel-border pixel-font"
                   >
                     AIで遊ぶコミュニティに参加する
